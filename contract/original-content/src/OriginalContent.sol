@@ -58,13 +58,21 @@ contract OriginalContent is IOriginalContent {
         emit WhitelistUpdated(pHash, domain, allowed);
     }
 
-    function getContent(bytes32 pHash) external view returns (ContentRecord memory) {}
+    function getContent(bytes32 pHash) external view returns (ContentRecord memory) {
+        if (records[pHash].creator == address(0)) {
+            revert OriginalContent__ContentNotExists();
+        }
+
+        return records[pHash];
+    }
 
     function isDomainWhitelisted(bytes32 pHash, string memory domain) external view returns (bool) {
+        if (records[pHash].creator == address(0)) {
+            revert OriginalContent__ContentNotExists();
+        }
+
         return domainWhitelist[pHash][domain];
     }
 
-
-    
 
 }
