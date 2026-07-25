@@ -38,22 +38,144 @@ contract OriginalContentUnitTest is Test {
         bytes32 pHash = keccak256(abi.encodePacked(testText));
 
         address alice = makeAddr("alice");
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, false, true);
         emit IOriginalContent.ContentRegistered(pHash, alice, s_sampleMetadataURI, block.timestamp);
         vm.prank(alice);
         originalContent.registerContent(pHash, s_sampleMetadataURI, s_sampleAllowedDomains);
     }
 
-    function testEmitsWhitelistUpdatedEvent() public {
-        string memory testText = "testText";
+    function testEmitsWhitelistAddedEvent() public {
+        string memory testText = "testText9999";
         bytes32 pHash = keccak256(abi.encodePacked(testText));
 
         address alice = makeAddr("alice");
-        vm.expectEmit(true, true, true, true);
-        emit IOriginalContent.WhitelistUpdated(pHash, s_sampleAllowedDomains[0], true);
+        vm.expectEmit(true, false, false, true);
+        emit IOriginalContent.WhitelistAdded(pHash, "sampleDomain1");
+
         vm.prank(alice);
         originalContent.registerContent(pHash, s_sampleMetadataURI, s_sampleAllowedDomains);
     }
 
+    function testIfContentIsNotRegistered() public {
+        string memory testText = "testText3333";
+        bytes32 pHash = keccak256(abi.encodePacked(testText));
+        vm.expectRevert(IOriginalContent.OriginalContent__ContentNotRegistered.selector);
+        originalContent.updateWhitelist(pHash, s_sampleAllowedDomains[0], true);
+    }
+    
+    function testIfNotContentCreator() public {
+        string memory testText = "testText4444";
+        bytes32 pHash = keccak256(abi.encodePacked(testText));
+        
+        address alice = makeAddr("alice");
+        address bob = makeAddr("bob");
+
+        vm.prank(alice);
+        originalContent.registerContent(pHash, s_sampleMetadataURI, s_sampleAllowedDomains);
+
+        vm.prank(bob);
+        vm.expectRevert(IOriginalContent.OriginalContent__NotContentCreator.selector);
+        originalContent.updateWhitelist(pHash, s_sampleAllowedDomains[0], true);
+    }
+
+    function testIfDomainIsEmpty() public {
+        string memory testText = "testText5555";
+        bytes32 pHash = keccak256(abi.encodePacked(testText));
+
+        address alice = makeAddr("alice");
+        vm.prank(alice);
+        originalContent.registerContent(pHash, s_sampleMetadataURI, s_sampleAllowedDomains);
+
+
+        vm.prank(alice);
+        vm.expectRevert(IOriginalContent.OriginalContent__ShouldNotBeEmptyDomain.selector);
+        originalContent.updateWhitelist(pHash, "", true);
+    }
+
+    function testIfDomainIsWhitelisted() public {
+        string memory testText = "testText6666";
+        bytes32 pHash = keccak256(abi.encodePacked(testText));
+
+        address alice = makeAddr("alice");
+        vm.prank(alice);
+        originalContent.registerContent(pHash, s_sampleMetadataURI, s_sampleAllowedDomains);
+
+        vm.prank(alice);
+        string memory domainToBeUpdated = "domainToBeUpdated";
+        originalContent.updateWhitelist(pHash, domainToBeUpdated, true);
+
+        bool isWhitelisted = originalContent.isDomainWhitelisted(pHash, domainToBeUpdated);
+        assertEq(isWhitelisted, true);
+    }
+
+    function testIfDomainIsNotWhitelisted() public {
+        string memory testText = "testText7777";
+        bytes32 pHash = keccak256(abi.encodePacked(testText));
+
+        address alice = makeAddr("alice");
+        vm.prank(alice);
+        originalContent.registerContent(pHash, s_sampleMetadataURI, s_sampleAllowedDomains);
+
+        vm.prank(alice);
+        originalContent.updateWhitelist(pHash, s_sampleAllowedDomains[0], false);
+
+        bool isWhitelisted = originalContent.isDomainWhitelisted(pHash, s_sampleAllowedDomains[0]);
+        assertEq(isWhitelisted, false);
+    }
+
+    function testIfContentIsRegistered() public {
+        string memory testText = "testText8888";
+        bytes32 pHash = keccak256(abi.encodePacked(testText));
+
+        address alice = makeAddr("alice");
+        vm.prank(alice);
+        originalContent.registerContent(pHash, s_sampleMetadataURI, s_sampleAllowedDomains);
+
+        (
+            address creator,
+            bytes32 storedPHash,
+            string memory storedMetadataURI,
+            uint256 createdAt,
+            bool isActive
+        ) = originalContent.records(pHash);
+
+        assertEq(creator, alice);
+        assertEq(storedPHash, pHash);
+        assertEq(storedMetadataURI, s_sampleMetadataURI);
+        assertEq(createdAt, block.timestamp);
+        assertEq(isActive, true);
+    }
+
+    function testEmitsWhitelistUpdatedEvent() public {
+        string memory testText = "testText101010";
+        bytes32 pHash = keccak256(abi.encodePacked(testText));
+
+        address alice = makeAddr("alice");
+        string memory domainToBeUpdated = "sampleDomain2";
+
+        vm.prank(alice);
+        originalContent.registerContent(pHash, s_sampleMetadataURI, s_sampleAllowedDomains);
+
+        vm.prank(alice);
+        vm.expectEmit(true, false, false, true);
+        emit IOriginalContent.WhitelistUpdated(pHash, domainToBeUpdated, true);
+        originalContent.updateWhitelist(pHash, domainToBeUpdated, true);
+    }
+
+    function testEmitsWhitelistUpdatedEventWhenRemovingDomain() public {
+        string memory testText = "testText111111";
+        bytes32 pHash = keccak256(abi.encodePacked(testText));
+
+        address alice = makeAddr("alice");
+        string memory domainToBeUpdated = s_sampleAllowedDomains[0];
+
+        vm.prank(alice);
+        originalContent.registerContent(pHash, s_sampleMetadataURI, s_sampleAllowedDomains);
+
+        vm.prank(alice);
+        vm.expectEmit(true, false, false, true);
+        emit IOriginalContent.WhitelistUpdated(pHash, domainToBeUpdated, false);
+        originalContent.updateWhitelist(pHash, domainToBeUpdated, false);
+    }
 
 }
