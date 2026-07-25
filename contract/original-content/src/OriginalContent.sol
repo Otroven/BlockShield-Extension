@@ -31,7 +31,7 @@ contract OriginalContent is IOriginalContent {
 
         for (uint256 i = 0; i < allowedDomains.length; i++) {
             domainWhitelist[pHash][allowedDomains[i]] = true;
-            emit WhitelistUpdated(pHash, allowedDomains[i], true);
+            emit WhitelistAdded(pHash, allowedDomains[i]);
         }
 
         emit ContentRegistered(pHash, msg.sender, metadataURI, block.timestamp);
@@ -41,11 +41,28 @@ contract OriginalContent is IOriginalContent {
         bytes32 pHash,
         string memory domain,
         bool allowed
-    ) external {}
+    ) external {
+        if (records[pHash].creator == address(0)) {
+            revert OriginalContent__ContentNotRegistered();
+        }
+
+        if (records[pHash].creator != msg.sender) {
+            revert OriginalContent__NotContentCreator();
+        }
+
+        if (bytes(domain).length == 0) {
+            revert OriginalContent__ShouldNotBeEmptyDomain();
+        }
+
+        domainWhitelist[pHash][domain] = allowed;
+        emit WhitelistUpdated(pHash, domain, allowed);
+    }
 
     function getContent(bytes32 pHash) external view returns (ContentRecord memory) {}
 
-    function isDomainWhitelisted(bytes32 pHash, string memory domain) external view returns (bool) {}
+    function isDomainWhitelisted(bytes32 pHash, string memory domain) external view returns (bool) {
+        return domainWhitelist[pHash][domain];
+    }
 
 
     
