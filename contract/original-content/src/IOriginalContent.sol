@@ -30,6 +30,14 @@ interface IOriginalContent {
         uint256 createdAt
     );
 
+       /**
+     * @notice : Emit when white list domain added
+     */
+    event WhitelistAdded(
+        bytes32 indexed pHash,
+        string domain
+    );
+
     /**
      * @notice : Emit when white list domain has changed
      */
@@ -46,6 +54,9 @@ interface IOriginalContent {
      */
     error OriginalContent__InvalidZeroPHash();
     error OriginalContent__ContentAlreadyRegistered();
+    error OriginalContent__ContentNotRegistered();
+    error OriginalContent__NotContentCreator();
+    error OriginalContent__ShouldNotBeEmptyDomain();
 
 
     /**
