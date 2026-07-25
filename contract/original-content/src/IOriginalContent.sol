@@ -57,7 +57,7 @@ interface IOriginalContent {
     error OriginalContent__ContentNotRegistered();
     error OriginalContent__NotContentCreator();
     error OriginalContent__ShouldNotBeEmptyDomain();
-
+    error OriginalContent__ContentNotExists();
 
     /**
      ************************************************************************************
