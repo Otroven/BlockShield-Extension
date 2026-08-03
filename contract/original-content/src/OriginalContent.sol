@@ -10,7 +10,7 @@ contract OriginalContent is IOriginalContent {
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 private constant REGISTER_CONTENT_TYPEHASH =
         keccak256(
-            "RegisterContent(bytes32 pHash,address creator,bytes32 metadataURIHash,bytes32 allowedDomainsHash,uint256 nonce,uint256 deadline)"
+            "RegisterContent(bytes32 pHash,address creator,bytes32 metadataURIHash,bytes32 allowedHostsHash,uint256 nonce,uint256 deadline)"
         );
     bytes32 private constant NAME_HASH = keccak256(bytes("OriginalContent"));
     bytes32 private constant VERSION_HASH = keccak256(bytes("1"));
@@ -23,7 +23,7 @@ contract OriginalContent is IOriginalContent {
         bytes32 pHash,
         address creator,
         string memory metadataURI,
-        string[] memory allowedDomains,
+        string[] memory allowedHosts,
         uint256 deadline,
         bytes memory signature
     ) external {
@@ -44,7 +44,7 @@ contract OriginalContent is IOriginalContent {
         }
 
         uint256 nonce = nonces[creator];
-        bytes32 digest = _buildDigest(pHash, creator, metadataURI, allowedDomains, nonce, deadline);
+        bytes32 digest = _buildDigest(pHash, creator, metadataURI, allowedHosts, nonce, deadline);
         address recoveredSigner = _recoverSigner(digest, signature);
         if (recoveredSigner != creator) {
             revert OriginalContent__InvalidSignature();
@@ -60,10 +60,10 @@ contract OriginalContent is IOriginalContent {
             isActive: true
         });
 
-        for (uint256 i = 0; i < allowedDomains.length; i++) {
-            _validateDomain(allowedDomains[i]);
-            domainWhitelist[pHash][allowedDomains[i]] = true;
-            emit WhitelistAdded(pHash, allowedDomains[i]);
+        for (uint256 i = 0; i < allowedHosts.length; i++) {
+            string memory normalizedHost = _normalizeHost(allowedHosts[i]);
+            domainWhitelist[pHash][normalizedHost] = true;
+            emit WhitelistAdded(pHash, normalizedHost);
         }
 
         emit ContentRegistered(pHash, creator, metadataURI, block.timestamp);
@@ -82,13 +82,10 @@ contract OriginalContent is IOriginalContent {
             revert OriginalContent__NotContentCreator();
         }
 
-        if (bytes(domain).length == 0) {
-            revert OriginalContent__ShouldNotBeEmptyDomain();
-        }
-        _validateLowercase(domain);
+        string memory normalizedHost = _normalizeHost(domain);
 
-        domainWhitelist[pHash][domain] = allowed;
-        emit WhitelistUpdated(pHash, domain, allowed);
+        domainWhitelist[pHash][normalizedHost] = allowed;
+        emit WhitelistUpdated(pHash, normalizedHost, allowed);
     }
 
     function getContent(bytes32 pHash) external view returns (ContentRecord memory) {
@@ -104,14 +101,15 @@ contract OriginalContent is IOriginalContent {
             revert OriginalContent__ContentNotExists();
         }
 
-        return domainWhitelist[pHash][domain];
+        string memory normalizedHost = _normalizeHost(domain);
+        return domainWhitelist[pHash][normalizedHost];
     }
 
     function _buildDigest(
         bytes32 pHash,
         address creator,
         string memory metadataURI,
-        string[] memory allowedDomains,
+        string[] memory allowedHosts,
         uint256 nonce,
         uint256 deadline
     ) private view returns (bytes32) {
@@ -121,7 +119,7 @@ contract OriginalContent is IOriginalContent {
                 pHash,
                 creator,
                 keccak256(bytes(metadataURI)),
-                _hashAllowedDomains(allowedDomains),
+                _hashAllowedHosts(allowedHosts),
                 nonce,
                 deadline
             )
@@ -135,29 +133,82 @@ contract OriginalContent is IOriginalContent {
         );
     }
 
-    function _hashAllowedDomains(string[] memory allowedDomains) private pure returns (bytes32) {
-        bytes32[] memory domainHashes = new bytes32[](allowedDomains.length);
-        for (uint256 i = 0; i < allowedDomains.length; i++) {
-            domainHashes[i] = keccak256(bytes(allowedDomains[i]));
+    function _hashAllowedHosts(string[] memory allowedHosts) private pure returns (bytes32) {
+        bytes32[] memory hostHashes = new bytes32[](allowedHosts.length);
+        for (uint256 i = 0; i < allowedHosts.length; i++) {
+            string memory normalizedHost = _normalizeHost(allowedHosts[i]);
+            hostHashes[i] = keccak256(bytes(normalizedHost));
         }
-        return keccak256(abi.encodePacked(domainHashes));
+        return keccak256(abi.encodePacked(hostHashes));
     }
 
-    function _validateDomain(string memory domain) private pure {
-        if (bytes(domain).length == 0) {
+    function _normalizeHost(string memory domain) private pure returns (string memory) {
+        bytes memory raw = bytes(domain);
+        uint256 start = 0;
+        uint256 end = raw.length;
+
+        while (start < end && _isWhitespace(raw[start])) {
+            start++;
+        }
+        while (end > start && _isWhitespace(raw[end - 1])) {
+            end--;
+        }
+
+        if (end == start) {
             revert OriginalContent__ShouldNotBeEmptyDomain();
         }
-        _validateLowercase(domain);
-    }
 
-    function _validateLowercase(string memory domain) private pure {
-        bytes memory domainBytes = bytes(domain);
-        for (uint256 i = 0; i < domainBytes.length; i++) {
-            bytes1 ch = domainBytes[i];
+        bytes memory normalized = new bytes(end - start);
+        for (uint256 i = 0; i < normalized.length; i++) {
+            bytes1 ch = raw[start + i];
             if (ch >= 0x41 && ch <= 0x5A) {
-                revert OriginalContent__DomainMustBeLowercase();
+                ch = bytes1(uint8(ch) + 32);
+            }
+
+            bool isLower = ch >= 0x61 && ch <= 0x7A;
+            bool isDigit = ch >= 0x30 && ch <= 0x39;
+            bool isDot = ch == 0x2E;
+            bool isHyphen = ch == 0x2D;
+            if (!(isLower || isDigit || isDot || isHyphen)) {
+                revert OriginalContent__InvalidDomainFormat();
+            }
+            normalized[i] = ch;
+        }
+
+        if (normalized[0] == 0x2E || normalized[normalized.length - 1] == 0x2E) {
+            revert OriginalContent__InvalidDomainFormat();
+        }
+
+        uint256 labelLength = 0;
+        for (uint256 i = 0; i < normalized.length; i++) {
+            bytes1 ch = normalized[i];
+            if (ch == 0x2E) {
+                if (labelLength == 0 || normalized[i - 1] == 0x2D) {
+                    revert OriginalContent__InvalidDomainFormat();
+                }
+                labelLength = 0;
+                continue;
+            }
+
+            if (labelLength == 0 && ch == 0x2D) {
+                revert OriginalContent__InvalidDomainFormat();
+            }
+
+            labelLength++;
+            if (labelLength > 63) {
+                revert OriginalContent__InvalidDomainFormat();
             }
         }
+
+        if (normalized[normalized.length - 1] == 0x2D) {
+            revert OriginalContent__InvalidDomainFormat();
+        }
+
+        return string(normalized);
+    }
+
+    function _isWhitespace(bytes1 ch) private pure returns (bool) {
+        return ch == 0x20 || ch == 0x09 || ch == 0x0A || ch == 0x0D;
     }
 
     function _recoverSigner(bytes32 digest, bytes memory signature) private pure returns (address) {

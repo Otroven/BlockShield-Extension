@@ -57,7 +57,7 @@ interface IOriginalContent {
     error OriginalContent__ContentNotRegistered();
     error OriginalContent__NotContentCreator();
     error OriginalContent__ShouldNotBeEmptyDomain();
-    error OriginalContent__DomainMustBeLowercase();
+    error OriginalContent__InvalidDomainFormat();
     error OriginalContent__ContentNotExists();
     error OriginalContent__InvalidSignature();
     error OriginalContent__SignatureExpired();
@@ -95,12 +95,12 @@ interface IOriginalContent {
 
 
     /**
-     * @notice Registers original content with its pHash, metadata URI, and allowed domains.
+     * @notice Registers original content with its pHash, metadata URI, and allowed hosts.
      * @dev State-changing function. Track results using the `ContentRegistered` event.
      * @param pHash Perceptual hash value of the media
      * @param creator Original creator address that signs typed data
      * @param metadataURI IPFS or external URL containing metadata
-     * @param allowedDomains List of domain addresses authorized to host/display the content
+     * @param allowedHosts List of host domains authorized to host/display the content
      * @param deadline Signature expiry timestamp
      * @param signature EIP-712 typed-data signature from creator
      */
@@ -108,7 +108,7 @@ interface IOriginalContent {
         bytes32 pHash,
         address creator,
         string memory metadataURI,
-        string[] memory allowedDomains,
+        string[] memory allowedHosts,
         uint256 deadline,
         bytes memory signature
     ) external;
@@ -116,7 +116,7 @@ interface IOriginalContent {
     /**
      * @notice Adds or removes a domain from the whitelist for a specific pHash.
      * @param pHash Perceptual hash of the target content
-     * @param domain Domain address to be configured
+     * @param domain Host domain to be configured
      * @param allowed True to grant authorization, false to revoke
      */
     function updateWhitelist(
@@ -135,7 +135,7 @@ interface IOriginalContent {
     /**
      * @notice Checks if a specific domain is authorized for the given pHash.
      * @param pHash Perceptual hash of the media
-     * @param domain Domain address to check
+     * @param domain Host domain to check
      * @return True if authorized, false otherwise
      */
     function isDomainWhitelisted(bytes32 pHash, string memory domain) external view returns (bool);
