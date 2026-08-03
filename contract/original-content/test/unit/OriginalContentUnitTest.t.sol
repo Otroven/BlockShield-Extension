@@ -162,6 +162,115 @@ contract OriginalContentUnitTest is Test {
         originalContent.updateWhitelist(pHash, " sampledomain1.com ", false);
     }
 
+    function testRegisterContentWithValidSignature() public {
+        bytes32 pHash = keccak256("image-a");
+        uint256 deadline = block.timestamp + 1 days;
+        bytes memory signature = _signRegisterPayload(
+            s_creatorKey,
+            pHash,
+            s_creator,
+            s_sampleMetadataURI,
+            s_sampleAllowedHosts,
+            originalContent.nonces(s_creator),
+            deadline
+        );
+        address relayer = makeAddr("relayer");
+
+        vm.prank(relayer);
+        originalContent.registerContent(pHash, s_creator, s_sampleMetadataURI, s_sampleAllowedHosts, deadline, signature);
+
+        IOriginalContent.ContentRecord memory record = originalContent.getContent(pHash);
+        assertEq(record.creator, s_creator);
+        assertEq(record.pHash, pHash);
+        assertEq(record.metadataURI, s_sampleMetadataURI);
+        assertEq(originalContent.nonces(s_creator), 1);
+    }
+
+    function testRegisterContentRevertsOnExpiredSignature() public {
+        bytes32 pHash = keccak256("image-b");
+        uint256 deadline = block.timestamp;
+        bytes memory signature = _signRegisterPayload(
+            s_creatorKey,
+            pHash,
+            s_creator,
+            s_sampleMetadataURI,
+            s_sampleAllowedHosts,
+            originalContent.nonces(s_creator),
+            deadline
+        );
+
+        vm.warp(block.timestamp + 1);
+        vm.expectRevert(IOriginalContent.OriginalContent__SignatureExpired.selector);
+        originalContent.registerContent(pHash, s_creator, s_sampleMetadataURI, s_sampleAllowedHosts, deadline, signature);
+    }
+
+    function testRegisterContentRevertsOnInvalidSignature() public {
+        bytes32 pHash = keccak256("image-c");
+        uint256 deadline = block.timestamp + 1 days;
+        (address wrongSigner, uint256 wrongSignerKey) = makeAddrAndKey("wrong-signer");
+        bytes memory signature = _signRegisterPayload(
+            wrongSignerKey,
+            pHash,
+            wrongSigner,
+            s_sampleMetadataURI,
+            s_sampleAllowedHosts,
+            originalContent.nonces(s_creator),
+            deadline
+        );
+
+        vm.expectRevert(IOriginalContent.OriginalContent__InvalidSignature.selector);
+        originalContent.registerContent(pHash, s_creator, s_sampleMetadataURI, s_sampleAllowedHosts, deadline, signature);
+    }
+
+    function testRegisterContentRevertsOnReplay() public {
+        bytes32 pHashA = keccak256("image-d-1");
+        bytes32 pHashB = keccak256("image-d-2");
+        uint256 deadline = block.timestamp + 1 days;
+        uint256 nonce = originalContent.nonces(s_creator);
+        bytes memory signature =
+            _signRegisterPayload(s_creatorKey, pHashA, s_creator, s_sampleMetadataURI, s_sampleAllowedHosts, nonce, deadline);
+
+        originalContent.registerContent(pHashA, s_creator, s_sampleMetadataURI, s_sampleAllowedHosts, deadline, signature);
+
+        vm.expectRevert(IOriginalContent.OriginalContent__InvalidSignature.selector);
+        originalContent.registerContent(pHashB, s_creator, s_sampleMetadataURI, s_sampleAllowedHosts, deadline, signature);
+    }
+
+    function testRegisterContentRevertsWhenCreatorIsZero() public {
+        bytes32 pHash = keccak256("image-e");
+        vm.expectRevert(IOriginalContent.OriginalContent__InvalidCreator.selector);
+        originalContent.registerContent(pHash, address(0), s_sampleMetadataURI, s_sampleAllowedHosts, 0, "");
+    }
+
+    function testRegisterContentNormalizesHosts() public {
+        bytes32 pHash = keccak256("image-f");
+        string[] memory hosts = new string[](1);
+        hosts[0] = "  Blog.Naver.COM  ";
+        _registerContent(pHash, s_creator, s_creatorKey, s_sampleMetadataURI, hosts);
+
+        assertTrue(originalContent.isDomainWhitelisted(pHash, "blog.naver.com"));
+        assertTrue(originalContent.isDomainWhitelisted(pHash, "  BLOG.NAVER.COM "));
+    }
+
+    function testRegisterContentRejectsUrlStyleHost() public {
+        bytes32 pHash = keccak256("image-g");
+        uint256 deadline = block.timestamp + 1 days;
+        string[] memory hosts = new string[](1);
+        hosts[0] = "https://blog.naver.com/path";
+
+        vm.expectRevert(IOriginalContent.OriginalContent__InvalidDomainFormat.selector);
+        originalContent.registerContent(pHash, s_creator, s_sampleMetadataURI, hosts, deadline, "");
+    }
+
+    function testUpdateWhitelistRejectsInvalidHost() public {
+        bytes32 pHash = keccak256("image-h");
+        _registerContent(pHash, s_creator, s_creatorKey, s_sampleMetadataURI, s_sampleAllowedHosts);
+
+        vm.prank(s_creator);
+        vm.expectRevert(IOriginalContent.OriginalContent__InvalidDomainFormat.selector);
+        originalContent.updateWhitelist(pHash, "bad host", true);
+    }
+
     function _registerContent(
         bytes32 pHash,
         address creator,
