@@ -6,5 +6,9 @@ contract/*/b
 contract/*/broadcast
 
 
-# ignore node_modules
+# ignore frontend deps, secrets, and build output
 frontend/node_modules
+frontend/dist
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
