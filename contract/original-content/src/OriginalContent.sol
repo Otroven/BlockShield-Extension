@@ -10,20 +10,19 @@ contract OriginalContent is IOriginalContent {
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 private constant REGISTER_CONTENT_TYPEHASH =
         keccak256(
-            "RegisterContent(bytes32 pHash,address creator,bytes32 metadataURIHash,bytes32 allowedHostsHash,uint256 nonce,uint256 deadline)"
+            "RegisterContent(bytes32 pHash,address creator,bytes32 allowedScopesHash,uint256 nonce,uint256 deadline)"
         );
     bytes32 private constant NAME_HASH = keccak256(bytes("OriginalContent"));
     bytes32 private constant VERSION_HASH = keccak256(bytes("1"));
 
     mapping(bytes32 pHash => ContentRecord) public records;
-    mapping(bytes32 pHash => mapping (string domain => bool isAllowed)) public domainWhitelist;
+    mapping(bytes32 pHash => mapping (string scope => bool isAllowed)) public scopeWhitelist;
     mapping(address creator => uint256 nonce) public nonces;
 
     function registerContent(
         bytes32 pHash,
         address creator,
-        string memory metadataURI,
-        string[] memory allowedHosts,
+        string[] memory allowedScopes,
         uint256 deadline,
         bytes memory signature
     ) external {
@@ -44,7 +43,7 @@ contract OriginalContent is IOriginalContent {
         }
 
         uint256 nonce = nonces[creator];
-        bytes32 digest = _buildDigest(pHash, creator, metadataURI, allowedHosts, nonce, deadline);
+        bytes32 digest = _buildDigest(pHash, creator, allowedScopes, nonce, deadline);
         address recoveredSigner = _recoverSigner(digest, signature);
         if (recoveredSigner != creator) {
             revert OriginalContent__InvalidSignature();
@@ -55,23 +54,22 @@ contract OriginalContent is IOriginalContent {
         records[pHash] = ContentRecord({
             creator: creator,
             pHash: pHash,
-            metadataURI: metadataURI,
             createdAt: block.timestamp,
             isActive: true
         });
 
-        for (uint256 i = 0; i < allowedHosts.length; i++) {
-            string memory normalizedHost = _normalizeHost(allowedHosts[i]);
-            domainWhitelist[pHash][normalizedHost] = true;
-            emit WhitelistAdded(pHash, normalizedHost);
+        for (uint256 i = 0; i < allowedScopes.length; i++) {
+            string memory normalizedScope = _normalizeScope(allowedScopes[i]);
+            scopeWhitelist[pHash][normalizedScope] = true;
+            emit WhitelistAdded(pHash, normalizedScope);
         }
 
-        emit ContentRegistered(pHash, creator, metadataURI, block.timestamp);
+        emit ContentRegistered(pHash, creator, block.timestamp);
     }
 
     function updateWhitelist(
         bytes32 pHash,
-        string memory domain,
+        string memory scope,
         bool allowed
     ) external {
         if (records[pHash].creator == address(0)) {
@@ -82,10 +80,10 @@ contract OriginalContent is IOriginalContent {
             revert OriginalContent__NotContentCreator();
         }
 
-        string memory normalizedHost = _normalizeHost(domain);
+        string memory normalizedScope = _normalizeScope(scope);
 
-        domainWhitelist[pHash][normalizedHost] = allowed;
-        emit WhitelistUpdated(pHash, normalizedHost, allowed);
+        scopeWhitelist[pHash][normalizedScope] = allowed;
+        emit WhitelistUpdated(pHash, normalizedScope, allowed);
     }
 
     function getContent(bytes32 pHash) external view returns (ContentRecord memory) {
@@ -96,20 +94,19 @@ contract OriginalContent is IOriginalContent {
         return records[pHash];
     }
 
-    function isDomainWhitelisted(bytes32 pHash, string memory domain) external view returns (bool) {
+    function isScopeWhitelisted(bytes32 pHash, string memory scope) external view returns (bool) {
         if (records[pHash].creator == address(0)) {
             revert OriginalContent__ContentNotExists();
         }
 
-        string memory normalizedHost = _normalizeHost(domain);
-        return domainWhitelist[pHash][normalizedHost];
+        string memory normalizedScope = _normalizeScope(scope);
+        return scopeWhitelist[pHash][normalizedScope];
     }
 
     function _buildDigest(
         bytes32 pHash,
         address creator,
-        string memory metadataURI,
-        string[] memory allowedHosts,
+        string[] memory allowedScopes,
         uint256 nonce,
         uint256 deadline
     ) private view returns (bytes32) {
@@ -118,8 +115,7 @@ contract OriginalContent is IOriginalContent {
                 REGISTER_CONTENT_TYPEHASH,
                 pHash,
                 creator,
-                keccak256(bytes(metadataURI)),
-                _hashAllowedHosts(allowedHosts),
+                _hashAllowedScopes(allowedScopes),
                 nonce,
                 deadline
             )
@@ -133,17 +129,17 @@ contract OriginalContent is IOriginalContent {
         );
     }
 
-    function _hashAllowedHosts(string[] memory allowedHosts) private pure returns (bytes32) {
-        bytes32[] memory hostHashes = new bytes32[](allowedHosts.length);
-        for (uint256 i = 0; i < allowedHosts.length; i++) {
-            string memory normalizedHost = _normalizeHost(allowedHosts[i]);
-            hostHashes[i] = keccak256(bytes(normalizedHost));
+    function _hashAllowedScopes(string[] memory allowedScopes) private pure returns (bytes32) {
+        bytes32[] memory scopeHashes = new bytes32[](allowedScopes.length);
+        for (uint256 i = 0; i < allowedScopes.length; i++) {
+            string memory normalizedScope = _normalizeScope(allowedScopes[i]);
+            scopeHashes[i] = keccak256(bytes(normalizedScope));
         }
-        return keccak256(abi.encodePacked(hostHashes));
+        return keccak256(abi.encodePacked(scopeHashes));
     }
 
-    function _normalizeHost(string memory domain) private pure returns (string memory) {
-        bytes memory raw = bytes(domain);
+    function _normalizeScope(string memory scope) private pure returns (string memory) {
+        bytes memory raw = bytes(scope);
         uint256 start = 0;
         uint256 end = raw.length;
 
@@ -155,10 +151,11 @@ contract OriginalContent is IOriginalContent {
         }
 
         if (end == start) {
-            revert OriginalContent__ShouldNotBeEmptyDomain();
+            revert OriginalContent__ShouldNotBeEmptyScope();
         }
 
         bytes memory normalized = new bytes(end - start);
+        uint256 hostEnd = normalized.length;
         for (uint256 i = 0; i < normalized.length; i++) {
             bytes1 ch = raw[start + i];
             if (ch >= 0x41 && ch <= 0x5A) {
@@ -169,42 +166,80 @@ contract OriginalContent is IOriginalContent {
             bool isDigit = ch >= 0x30 && ch <= 0x39;
             bool isDot = ch == 0x2E;
             bool isHyphen = ch == 0x2D;
-            if (!(isLower || isDigit || isDot || isHyphen)) {
-                revert OriginalContent__InvalidDomainFormat();
+            bool isSlash = ch == 0x2F;
+            bool isUnderscore = ch == 0x5F;
+            bool isTilde = ch == 0x7E;
+            bool isPercent = ch == 0x25;
+            if (!(isLower || isDigit || isDot || isHyphen || isSlash || isUnderscore || isTilde || isPercent)) {
+                revert OriginalContent__InvalidScopeFormat();
+            }
+            if (isSlash && hostEnd == normalized.length) {
+                hostEnd = i;
             }
             normalized[i] = ch;
         }
 
-        if (normalized[0] == 0x2E || normalized[normalized.length - 1] == 0x2E) {
-            revert OriginalContent__InvalidDomainFormat();
+        if (hostEnd == 0) {
+            revert OriginalContent__InvalidScopeFormat();
+        }
+
+        if (normalized[0] == 0x2E || normalized[hostEnd - 1] == 0x2E) {
+            revert OriginalContent__InvalidScopeFormat();
         }
 
         uint256 labelLength = 0;
-        for (uint256 i = 0; i < normalized.length; i++) {
+        for (uint256 i = 0; i < hostEnd; i++) {
             bytes1 ch = normalized[i];
-            if (ch == 0x2E) {
-                if (labelLength == 0 || normalized[i - 1] == 0x2D) {
-                    revert OriginalContent__InvalidDomainFormat();
+            bool isDot = ch == 0x2E;
+            if (isDot) {
+                if (labelLength == 0 || normalized[i - 1] == 0x2D || i + 1 == hostEnd) {
+                    revert OriginalContent__InvalidScopeFormat();
                 }
                 labelLength = 0;
                 continue;
             }
 
             if (labelLength == 0 && ch == 0x2D) {
-                revert OriginalContent__InvalidDomainFormat();
+                revert OriginalContent__InvalidScopeFormat();
             }
 
             labelLength++;
             if (labelLength > 63) {
-                revert OriginalContent__InvalidDomainFormat();
+                revert OriginalContent__InvalidScopeFormat();
             }
         }
 
-        if (normalized[normalized.length - 1] == 0x2D) {
-            revert OriginalContent__InvalidDomainFormat();
+        if (normalized[hostEnd - 1] == 0x2D) {
+            revert OriginalContent__InvalidScopeFormat();
         }
 
-        return string(normalized);
+        uint256 scopeEnd = normalized.length;
+        while (scopeEnd > hostEnd && normalized[scopeEnd - 1] == 0x2F) {
+            scopeEnd--;
+        }
+
+        for (uint256 i = hostEnd; i + 1 < scopeEnd; i++) {
+            if (normalized[i] == 0x2F && normalized[i + 1] == 0x2F) {
+                revert OriginalContent__InvalidScopeFormat();
+            }
+        }
+
+        if (scopeEnd == hostEnd) {
+            return string(_sliceBytes(normalized, 0, hostEnd));
+        }
+        if (normalized[hostEnd] != 0x2F) {
+            revert OriginalContent__InvalidScopeFormat();
+        }
+
+        return string(_sliceBytes(normalized, 0, scopeEnd));
+    }
+
+    function _sliceBytes(bytes memory input, uint256 start, uint256 end) private pure returns (bytes memory) {
+        bytes memory output = new bytes(end - start);
+        for (uint256 i = 0; i < output.length; i++) {
+            output[i] = input[start + i];
+        }
+        return output;
     }
 
     function _isWhitespace(bytes1 ch) private pure returns (bool) {
