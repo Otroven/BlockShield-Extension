@@ -26,7 +26,6 @@ interface IOriginalContent {
     event ContentRegistered(
         bytes32 indexed pHash,
         address indexed creator,
-        string metadataURI,
         uint256 createdAt
     );
 
@@ -35,7 +34,7 @@ interface IOriginalContent {
      */
     event WhitelistAdded(
         bytes32 indexed pHash,
-        string domain
+        string scope
     );
 
     /**
@@ -43,7 +42,7 @@ interface IOriginalContent {
      */
     event WhitelistUpdated(
         bytes32 indexed pHash,
-        string domain,
+        string scope,
         bool allowed
     );
 
@@ -56,8 +55,8 @@ interface IOriginalContent {
     error OriginalContent__ContentAlreadyRegistered();
     error OriginalContent__ContentNotRegistered();
     error OriginalContent__NotContentCreator();
-    error OriginalContent__ShouldNotBeEmptyDomain();
-    error OriginalContent__InvalidDomainFormat();
+    error OriginalContent__ShouldNotBeEmptyScope();
+    error OriginalContent__InvalidScopeFormat();
     error OriginalContent__ContentNotExists();
     error OriginalContent__InvalidSignature();
     error OriginalContent__SignatureExpired();
@@ -73,14 +72,12 @@ interface IOriginalContent {
      * @notice Struct representing the record of a registered content
      * @param creator Wallet address of the content creator
      * @param pHash Perceptual hash of the media
-     * @param metadataURI URI link pointing to the metadata (e.g., IPFS)
      * @param createdAt Timestamp when the content was registered
      * @param isActive Status indicating if the record is currently valid
      */
     struct ContentRecord {
       address creator;
       bytes32 pHash;
-      string metadataURI;
       uint256 createdAt;
       bool isActive;  
     }
@@ -95,50 +92,48 @@ interface IOriginalContent {
 
 
     /**
-     * @notice Registers original content with its pHash, metadata URI, and allowed hosts.
+     * @notice Registers original content with its pHash and allowed scopes.
      * @dev State-changing function. Track results using the `ContentRegistered` event.
      * @param pHash Perceptual hash value of the media
      * @param creator Original creator address that signs typed data
-     * @param metadataURI IPFS or external URL containing metadata
-     * @param allowedHosts List of host domains authorized to host/display the content
+     * @param allowedScopes List of host/path scopes authorized to host/display the content
      * @param deadline Signature expiry timestamp
      * @param signature EIP-712 typed-data signature from creator
      */
     function registerContent(
         bytes32 pHash,
         address creator,
-        string memory metadataURI,
-        string[] memory allowedHosts,
+        string[] memory allowedScopes,
         uint256 deadline,
         bytes memory signature
     ) external;
 
     /**
-     * @notice Adds or removes a domain from the whitelist for a specific pHash.
+     * @notice Adds or removes a scope from the whitelist for a specific pHash.
      * @param pHash Perceptual hash of the target content
-     * @param domain Host domain to be configured
+     * @param scope Host/path scope to be configured
      * @param allowed True to grant authorization, false to revoke
      */
     function updateWhitelist(
         bytes32 pHash,
-        string memory domain,
+        string memory scope,
         bool allowed
     ) external;
 
     /**
      * @notice Fetches the full content record by pHash.
      * @param pHash Perceptual hash of the media
-     * @return ContentRecord struct containing creator, pHash, metadataURI, createdAt, and isActive
+     * @return ContentRecord struct containing creator, pHash, createdAt, and isActive
      */
     function getContent(bytes32 pHash) external view returns (ContentRecord memory);
 
     /**
-     * @notice Checks if a specific domain is authorized for the given pHash.
+     * @notice Checks if a specific scope is authorized for the given pHash.
      * @param pHash Perceptual hash of the media
-     * @param domain Host domain to check
+     * @param scope Host/path scope to check
      * @return True if authorized, false otherwise
      */
-    function isDomainWhitelisted(bytes32 pHash, string memory domain) external view returns (bool);
+    function isScopeWhitelisted(bytes32 pHash, string memory scope) external view returns (bool);
 
     /**
      * @notice Returns the current EIP-712 nonce for `creator`.

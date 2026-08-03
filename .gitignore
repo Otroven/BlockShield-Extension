@@ -1,3 +1,10 @@
 # ignore build outputs of contract
 contract/*/cache
 contract/*/out
+contract/*/build
+contract/*/b
+contract/*/broadcast
+
+
+# ignore node_modules
+frontend/node_modules
