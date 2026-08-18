@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { CopyRow } from "../components/CopyRow";
 import { useBlog } from "../context/BlogContext";
+import { useWallet } from "../context/WalletContext";
+import { CHAIN_ID, CONTRACT_ADDRESS } from "../lib/config";
 import { computePerceptualHashFromFile } from "../lib/phash";
 import {
   buildPostScope,
-  connectWallet,
-  getConnectedWallet,
   normalizeScope,
   registerOriginalContent,
   updateContentScopes,
 } from "../lib/web3";
+
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 function toAuthorId(name) {
   return name.trim().toLowerCase().replace(/\s+/g, "-");
@@ -24,28 +27,30 @@ function toDataUrl(file) {
   });
 }
 
-function formatWalletStatus(wallet) {
-  if (!wallet) return "지갑 미연결";
-  return `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)} · chain ${
-    wallet.chainId
-  }`;
-}
-
 export function EditorPage({ mode }) {
   const { postId } = useParams();
   const navigate = useNavigate();
   const { posts, upsertPost } = useBlog();
+  const {
+    wallet,
+    connecting,
+    connect,
+    disconnect,
+    switchNetwork,
+    walletReady,
+    wrongNetwork,
+  } = useWallet();
 
-  const contractAddress =
-    import.meta.env.VITE_CONTRACT_ADDRESS ||
-    "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-  const chainId = Number(import.meta.env.VITE_CHAIN_ID || 31337);
-
+  const [draftId] = useState(() => crypto.randomUUID());
   const editingPost = useMemo(
     () => posts.find((post) => post.id === postId),
     [posts, postId]
   );
   const isEdit = mode === "edit";
+  const postIdForSave = isEdit ? editingPost?.id : draftId;
+  const defaultScope = postIdForSave
+    ? `${window.location.hostname}/post/${postIdForSave}`
+    : "";
 
   const [authorName, setAuthorName] = useState("");
   const [title, setTitle] = useState("");
@@ -54,22 +59,8 @@ export function EditorPage({ mode }) {
   const [imageUrl, setImageUrl] = useState("");
   const [pHash, setPHash] = useState("");
   const [registerOnchain, setRegisterOnchain] = useState(true);
-  const [wallet, setWallet] = useState(null);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    getConnectedWallet()
-      .then((connected) => {
-        if (!cancelled) setWallet(connected);
-      })
-      .catch(() => {
-        if (!cancelled) setWallet(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [hashing, setHashing] = useState(false);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -94,35 +85,40 @@ export function EditorPage({ mode }) {
   }
 
   const alreadyOnchain = isEdit && !!editingPost.onchain;
-  const walletReady = !!wallet;
 
   const onConnectWallet = async () => {
     try {
-      const connected = await connectWallet();
-      setWallet(connected);
+      await connect();
     } catch (error) {
-      setWallet(null);
       window.alert(error.message || "지갑 연결에 실패했습니다.");
     }
   };
 
-  const onDisconnectWallet = async () => {
+  const onSwitchNetwork = async () => {
     try {
-      if (window.ethereum?.request) {
-        await window.ethereum.request({
-          method: "wallet_revokePermissions",
-          params: [{ eth_accounts: {} }],
-        });
-      }
-    } catch {
-      // MetaMask 버전에 따라 revoke가 없을 수 있음 → 앱 상태만 끊음
+      await switchNetwork();
+    } catch (error) {
+      window.alert(error.message || "네트워크 전환에 실패했습니다.");
     }
-    setWallet(null);
   };
 
   const onImageChange = async (event) => {
     const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
+    if (alreadyOnchain) {
+      window.alert("온체인에 등록된 이미지는 바꿀 수 없습니다. 새 글로 등록하세요.");
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      window.alert("이미지 파일만 업로드할 수 있습니다.");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      window.alert("이미지는 2MB 이하만 업로드할 수 있습니다.");
+      return;
+    }
+    setHashing(true);
     try {
       const [dataUrl, hash] = await Promise.all([
         toDataUrl(file),
@@ -132,6 +128,8 @@ export function EditorPage({ mode }) {
       setPHash(hash.bytes32);
     } catch (error) {
       window.alert(error.message || "이미지 처리에 실패했습니다.");
+    } finally {
+      setHashing(false);
     }
   };
 
@@ -164,15 +162,11 @@ export function EditorPage({ mode }) {
       return;
     }
     if (!pHash) {
-      window.alert("pHash 계산이 필요합니다.");
+      window.alert("pHash 계산이 필요합니다. 이미지를 다시 선택하세요.");
       return;
     }
 
     const willRegister = registerOnchain && !alreadyOnchain;
-    if (willRegister && !walletReady) {
-      window.alert("온체인 등록을 사용하려면 먼저 MetaMask를 연결하세요.");
-      return;
-    }
 
     let allowedScopes;
     try {
@@ -185,52 +179,58 @@ export function EditorPage({ mode }) {
           throw new Error("저작권 허용 URL을 최소 1개 입력하세요.");
         }
       } else {
-        allowedScopes = null;
+        allowedScopes = [buildPostScope(postIdForSave)];
       }
     } catch (error) {
       window.alert(error.message);
       return;
     }
 
+    const prevScopes = new Set(editingPost?.allowedScopes || []);
+    const scopesToAdd = alreadyOnchain
+      ? allowedScopes.filter((scope) => !prevScopes.has(scope))
+      : [];
+    const scopesToRemove = alreadyOnchain
+      ? [...prevScopes].filter((scope) => !allowedScopes.includes(scope))
+      : [];
+    const willUpdateScopes = scopesToAdd.length > 0 || scopesToRemove.length > 0;
+    const needsChain = willRegister || willUpdateScopes;
+
+    if (needsChain && !walletReady) {
+      window.alert(
+        willRegister
+          ? "온체인 등록을 사용하려면 먼저 MetaMask를 연결하세요."
+          : "허용 URL을 온체인에 반영하려면 먼저 MetaMask를 연결하세요."
+      );
+      return;
+    }
+    if (needsChain && wrongNetwork) {
+      window.alert(`지갑 네트워크를 chainId ${CHAIN_ID}로 전환한 뒤 다시 시도하세요.`);
+      return;
+    }
+
     setSaving(true);
     try {
       const authorId = toAuthorId(authorName);
-      const postIdForSave = isEdit ? editingPost.id : crypto.randomUUID();
-      if (!isEdit) {
-        allowedScopes = [buildPostScope(postIdForSave)];
-      }
-
       let chainResult = null;
       let onchain = alreadyOnchain;
 
       if (willRegister) {
         chainResult = await registerOriginalContent({
-          contractAddress,
-          expectedChainId: chainId,
+          contractAddress: CONTRACT_ADDRESS,
+          expectedChainId: CHAIN_ID,
           pHashBytes32: pHash,
           allowedScopes,
         });
         onchain = true;
-      } else if (alreadyOnchain) {
-        const prev = new Set(editingPost.allowedScopes || []);
-        const next = new Set(allowedScopes);
-        const scopesToAdd = allowedScopes.filter((scope) => !prev.has(scope));
-        const scopesToRemove = [...prev].filter((scope) => !next.has(scope));
-        if (scopesToAdd.length || scopesToRemove.length) {
-          if (!walletReady) {
-            window.alert(
-              "허용 URL을 온체인에 반영하려면 먼저 MetaMask를 연결하세요."
-            );
-            return;
-          }
-          chainResult = await updateContentScopes({
-            contractAddress,
-            expectedChainId: chainId,
-            pHashBytes32: pHash,
-            scopesToAdd,
-            scopesToRemove,
-          });
-        }
+      } else if (willUpdateScopes) {
+        chainResult = await updateContentScopes({
+          contractAddress: CONTRACT_ADDRESS,
+          expectedChainId: CHAIN_ID,
+          pHashBytes32: pHash,
+          scopesToAdd,
+          scopesToRemove,
+        });
       }
 
       const newId = upsertPost(
@@ -245,6 +245,9 @@ export function EditorPage({ mode }) {
           pHash,
           onchain,
           txHash: chainResult?.txHash || editingPost?.txHash || "",
+          creator: chainResult?.creator || editingPost?.creator || wallet?.address || "",
+          chainId: chainResult?.chainId || editingPost?.chainId || CHAIN_ID,
+          blockNumber: chainResult?.blockNumber ?? editingPost?.blockNumber ?? null,
         },
         isEdit ? editingPost.id : null
       );
@@ -260,11 +263,12 @@ export function EditorPage({ mode }) {
   return (
     <section className="page container editor">
       <div className="editor-headline">
+        <p className="eyebrow">OriginalContent</p>
         <h1>{isEdit ? "포스트 수정" : "새 포스트 작성"}</h1>
         <p className="editor-help">
           {isEdit
             ? "허용 URL을 추가·수정하고, 필요하면 온체인 화이트리스트에 반영하세요."
-            : "글과 이미지를 작성하세요. 온체인 등록 시 이 포스트 URL이 기본 허용 스코프로 들어갑니다."}
+            : "이미지의 pHash를 계산한 뒤, 지갑 서명으로 스마트 컨트랙트에 저작권을 기록합니다."}
         </p>
       </div>
 
@@ -306,14 +310,32 @@ export function EditorPage({ mode }) {
           </div>
 
           <div className="editor-section">
-            <h2>이미지</h2>
-            <label className="upload-box">
-              <span className="upload-title">대표 이미지 업로드</span>
-              <span className="upload-desc">클릭해서 이미지를 선택하세요</span>
-              <input type="file" accept="image/*" onChange={onImageChange} />
-            </label>
+            <h2>이미지 · pHash</h2>
+            {alreadyOnchain ? (
+              <p className="section-tip">
+                이미 온체인에 등록된 pHash는 바꿀 수 없습니다. 다른 이미지는 새 글로
+                등록하세요.
+              </p>
+            ) : (
+              <label className={`upload-box ${hashing ? "is-busy" : ""}`}>
+                <span className="upload-title">
+                  {hashing ? "pHash 계산 중..." : "대표 이미지 업로드"}
+                </span>
+                <span className="upload-desc">JPG, PNG · 2MB 이하</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={onImageChange}
+                  disabled={hashing || saving}
+                />
+              </label>
+            )}
             {imageUrl && (
-              <img src={imageUrl} alt="preview" className="editor-preview" />
+              <img src={imageUrl} alt="업로드한 대표 이미지 미리보기" className="editor-preview" />
+            )}
+            {pHash && <CopyRow label="pHash" value={pHash} />}
+            {!alreadyOnchain && defaultScope && (
+              <p className="chain-hint">기본 허용 URL: {defaultScope}</p>
             )}
           </div>
         </div>
@@ -323,15 +345,11 @@ export function EditorPage({ mode }) {
             <div className="editor-section">
               <div className="scope-list-header">
                 <h2>저작권 허용 URL</h2>
-                <button
-                  type="button"
-                  className="btn-chip"
-                  onClick={addScopeEntry}
-                >
+                <button type="button" className="btn-chip" onClick={addScopeEntry}>
                   + 추가
                 </button>
               </div>
-              <p className="section-tip">예: blog.naver.com/otroven</p>
+              <p className="section-tip">예: blog.naver.com/your-id</p>
               <div className="scope-list">
                 {scopeEntries.map((scope, index) => (
                   <div key={`scope-${index}`} className="scope-row">
@@ -345,7 +363,7 @@ export function EditorPage({ mode }) {
                       className="btn-icon"
                       onClick={() => removeScopeEntry(index)}
                       disabled={scopeEntries.length === 1}
-                      aria-label="remove scope"
+                      aria-label="허용 URL 삭제"
                     >
                       −
                     </button>
@@ -375,21 +393,37 @@ export function EditorPage({ mode }) {
 
             {(registerOnchain || alreadyOnchain) && (
               <div className="chain-panel">
+                {wrongNetwork && (
+                  <p className="chain-hint warn">
+                    현재 chainId={wallet.chainId}. Anvil({CHAIN_ID})로 전환하세요.
+                  </p>
+                )}
                 {walletReady ? (
                   <>
-                    <p className="wallet-line is-connected">
-                      {formatWalletStatus(wallet)}
+                    <p className={`wallet-line ${wrongNetwork ? "is-disconnected" : "is-connected"}`}>
+                      {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)} · chain{" "}
+                      {wallet.chainId}
                     </p>
-                    <button
-                      type="button"
-                      className="btn-secondary chain-connect"
-                      onClick={onDisconnectWallet}
-                    >
-                      MetaMask 연결 끊기
-                    </button>
-                    {!alreadyOnchain && (
+                    {wrongNetwork ? (
+                      <button
+                        type="button"
+                        className="btn-secondary chain-connect"
+                        onClick={onSwitchNetwork}
+                      >
+                        네트워크 전환
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn-secondary chain-connect"
+                        onClick={disconnect}
+                      >
+                        MetaMask 연결 끊기
+                      </button>
+                    )}
+                    {!alreadyOnchain && !wrongNetwork && (
                       <p className="chain-hint">
-                        저장 시 서명 후 등록 트랜잭션이 실행됩니다.
+                        저장 시 EIP-712 서명 후 등록 트랜잭션이 실행됩니다.
                       </p>
                     )}
                   </>
@@ -398,8 +432,9 @@ export function EditorPage({ mode }) {
                     type="button"
                     className="btn-secondary chain-connect"
                     onClick={onConnectWallet}
+                    disabled={connecting}
                   >
-                    MetaMask 연결
+                    {connecting ? "연결 중..." : "MetaMask 연결"}
                   </button>
                 )}
               </div>
@@ -407,7 +442,7 @@ export function EditorPage({ mode }) {
           </div>
 
           <div className="editor-actions">
-            <button className="btn-primary" type="submit" disabled={saving}>
+            <button className="btn-primary" type="submit" disabled={saving || hashing}>
               {saving ? "저장 중..." : isEdit ? "수정 저장" : "글 저장"}
             </button>
           </div>

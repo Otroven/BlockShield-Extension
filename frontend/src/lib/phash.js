@@ -12,12 +12,15 @@ function ensurePhashLibrary() {
     script.async = true;
     script.onload = () => {
       if (!window.pHash?.hash) {
-        reject(new Error("pHash library loaded but API is unavailable."));
+        reject(new Error("pHash 라이브러리를 불러왔지만 API를 사용할 수 없습니다."));
         return;
       }
       resolve(window.pHash);
     };
-    script.onerror = () => reject(new Error("Failed to load pHash library."));
+    script.onerror = () => {
+      scriptPromise = null;
+      reject(new Error("pHash 라이브러리를 불러오지 못했습니다."));
+    };
     document.head.appendChild(script);
   });
 
@@ -40,7 +43,7 @@ export async function computePerceptualHashFromFile(file) {
     typeof hash?.toBinary === "function" ? hash.toBinary() : typeof hash?.value === "string" ? hash.value : "";
 
   if (!binary || !/^[01]+$/.test(binary)) {
-    throw new Error("Failed to compute binary pHash.");
+    throw new Error("이미지 pHash를 계산하지 못했습니다.");
   }
 
   return {

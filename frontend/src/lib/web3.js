@@ -1,4 +1,11 @@
-import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.2/+esm";
+import { ethers } from "ethers";
+import {
+  CHAIN_ID,
+  CHAIN_NAME,
+  CONTRACT_ADDRESS,
+  RPC_URL,
+  toHexChainId,
+} from "./config";
 
 const ABI = [
   "function nonces(address creator) view returns (uint256)",
@@ -24,7 +31,8 @@ const ERROR_MESSAGES = {
 };
 
 function humanizeContractError(error) {
-  const raw = error?.shortMessage || error?.reason || error?.message || String(error || "");
+  const raw =
+    error?.shortMessage || error?.reason || error?.message || String(error || "");
   const data = error?.data || error?.info?.error?.data || error?.error?.data;
   const hex = typeof data === "string" ? data : data?.data;
   if (typeof hex === "string" && hex.startsWith("0x") && hex.length >= 10) {
@@ -42,47 +50,71 @@ function humanizeContractError(error) {
   if (/no data present|execution reverted/i.test(blob)) {
     return "온체인 등록이 거절되었습니다. 같은 이미지가 이미 등록됐거나, 계약/네트워크 설정을 확인하세요.";
   }
-  if (/user rejected|ACTION_REJECTED|denied/i.test(blob)) {
+  if (/user rejected|ACTION_REJECTED|denied|4001/i.test(blob)) {
     return "지갑에서 요청을 거절했습니다.";
   }
-  if (/Wrong network/i.test(blob)) return raw;
+  if (/Wrong network|네트워크가 다릅니다/i.test(blob)) return raw;
+  if (/could not detect network|failed to detect|ECONNREFUSED|fetch failed/i.test(blob)) {
+    return "로컬 체인에 연결할 수 없습니다. Anvil이 실행 중인지 확인하세요.";
+  }
   return raw.length > 180 ? `${raw.slice(0, 180)}…` : raw;
 }
 
+function requireEthereum() {
+  if (!window.ethereum) {
+    throw new Error(
+      "MetaMask가 설치되어 있지 않습니다. 확장 프로그램을 설치한 뒤 새로고침하세요."
+    );
+  }
+  return window.ethereum;
+}
+
 function validateHost(host, originalInput) {
-  if (!host) throw new Error(`Invalid scope format: ${originalInput}`);
-  if (!/^[a-z0-9.-]+$/.test(host)) throw new Error(`Invalid scope format: ${originalInput}`);
-  if (host.startsWith(".") || host.endsWith(".")) throw new Error(`Invalid scope format: ${originalInput}`);
-  if (host.endsWith("-")) throw new Error(`Invalid scope format: ${originalInput}`);
+  if (!host) throw new Error(`허용 URL 형식이 올바르지 않습니다: ${originalInput}`);
+  if (!/^[a-z0-9.-]+$/.test(host)) {
+    throw new Error(`허용 URL 형식이 올바르지 않습니다: ${originalInput}`);
+  }
+  if (host.startsWith(".") || host.endsWith(".")) {
+    throw new Error(`허용 URL 형식이 올바르지 않습니다: ${originalInput}`);
+  }
+  if (host.endsWith("-")) {
+    throw new Error(`허용 URL 형식이 올바르지 않습니다: ${originalInput}`);
+  }
   const labels = host.split(".");
   for (const label of labels) {
     if (!label || label.startsWith("-") || label.endsWith("-") || label.length > 63) {
-      throw new Error(`Invalid scope format: ${originalInput}`);
+      throw new Error(`허용 URL 형식이 올바르지 않습니다: ${originalInput}`);
     }
   }
 }
 
 function validatePath(pathname, originalInput) {
   if (!pathname) return;
-  if (!pathname.startsWith("/")) throw new Error(`Invalid scope format: ${originalInput}`);
-  if (/\/\//.test(pathname)) throw new Error(`Invalid scope format: ${originalInput}`);
-  if (!/^\/[a-z0-9._~/%-]*$/i.test(pathname)) throw new Error(`Invalid scope format: ${originalInput}`);
+  if (!pathname.startsWith("/")) {
+    throw new Error(`허용 URL 형식이 올바르지 않습니다: ${originalInput}`);
+  }
+  if (/\/\//.test(pathname)) {
+    throw new Error(`허용 URL 형식이 올바르지 않습니다: ${originalInput}`);
+  }
+  if (!/^\/[a-z0-9._~/%-]*$/i.test(pathname)) {
+    throw new Error(`허용 URL 형식이 올바르지 않습니다: ${originalInput}`);
+  }
 }
 
 export function normalizeScope(input) {
   const trimmed = input.trim();
-  if (!trimmed) throw new Error("Scope cannot be empty.");
+  if (!trimmed) throw new Error("허용 URL을 입력하세요.");
 
   let parsed;
   try {
     const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
     parsed = new URL(candidate);
   } catch {
-    throw new Error(`Invalid scope format: ${input}`);
+    throw new Error(`허용 URL 형식이 올바르지 않습니다: ${input}`);
   }
 
   if (parsed.username || parsed.password || parsed.port || parsed.search || parsed.hash) {
-    throw new Error(`Invalid scope format: ${input}`);
+    throw new Error(`허용 URL 형식이 올바르지 않습니다: ${input}`);
   }
 
   const host = parsed.host.toLowerCase();
@@ -97,16 +129,42 @@ export function normalizeScope(input) {
   return `${host}${pathname}`;
 }
 
-export function parseAllowedScopes(input) {
-  return input
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .map(normalizeScope);
+export async function ensureExpectedNetwork(expectedChainId = CHAIN_ID) {
+  const ethereum = requireEthereum();
+  const hexChainId = toHexChainId(expectedChainId);
+
+  try {
+    await ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: hexChainId }],
+    });
+  } catch (error) {
+    if (error?.code === 4902) {
+      await ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: hexChainId,
+            chainName: CHAIN_NAME,
+            nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+            rpcUrls: [RPC_URL],
+          },
+        ],
+      });
+      return;
+    }
+    if (error?.code === 4001) {
+      throw new Error("네트워크 전환을 지갑에서 거절했습니다.");
+    }
+    throw new Error(humanizeContractError(error));
+  }
 }
 
-export async function connectWallet() {
-  if (!window.ethereum) throw new Error("MetaMask is not installed.");
+export async function connectWallet({ expectedChainId } = {}) {
+  requireEthereum();
+  if (expectedChainId) {
+    await ensureExpectedNetwork(expectedChainId);
+  }
   const provider = new ethers.BrowserProvider(window.ethereum);
   await provider.send("eth_requestAccounts", []);
   const signer = await provider.getSigner();
@@ -131,18 +189,47 @@ export function buildPostScope(postId) {
   return normalizeScope(`${window.location.hostname}/post/${postId}`);
 }
 
+export async function fetchOnchainRecord({
+  contractAddress = CONTRACT_ADDRESS,
+  pHashBytes32,
+} = {}) {
+  if (!pHashBytes32) return null;
+  if (!ethers.isAddress(contractAddress)) {
+    throw new Error("컨트랙트 주소가 올바르지 않습니다.");
+  }
+
+  const provider = window.ethereum
+    ? new ethers.BrowserProvider(window.ethereum)
+    : new ethers.JsonRpcProvider(RPC_URL);
+  const contract = new ethers.Contract(contractAddress, ABI, provider);
+  const record = await contract.records(pHashBytes32);
+  const creator = record.creator;
+  if (!creator || creator === ethers.ZeroAddress) return null;
+
+  return {
+    creator,
+    pHash: record.pHashOut,
+    createdAt: Number(record.createdAt),
+    isActive: Boolean(record.isActive),
+  };
+}
+
 export async function updateContentScopes({
-  contractAddress,
-  expectedChainId,
+  contractAddress = CONTRACT_ADDRESS,
+  expectedChainId = CHAIN_ID,
   pHashBytes32,
   scopesToAdd = [],
   scopesToRemove = [],
 }) {
-  if (!ethers.isAddress(contractAddress)) throw new Error("Contract address is invalid.");
+  if (!ethers.isAddress(contractAddress)) {
+    throw new Error("컨트랙트 주소가 올바르지 않습니다.");
+  }
   try {
-    const { signer, chainId } = await connectWallet();
+    const { signer, chainId } = await connectWallet({ expectedChainId });
     if (expectedChainId && Number(expectedChainId) !== chainId) {
-      throw new Error(`Wrong network. Connected chainId=${chainId}, expected=${expectedChainId}.`);
+      throw new Error(
+        `연결된 네트워크가 다릅니다. 현재 chainId=${chainId}, 필요한 chainId=${expectedChainId}.`
+      );
     }
 
     const contract = new ethers.Contract(contractAddress, ABI, signer);
@@ -166,28 +253,33 @@ export async function updateContentScopes({
 }
 
 export async function registerOriginalContent({
-  contractAddress,
-  expectedChainId,
+  contractAddress = CONTRACT_ADDRESS,
+  expectedChainId = CHAIN_ID,
   pHashBytes32,
   allowedScopes,
   deadlineSeconds = 600,
 }) {
-  if (!ethers.isAddress(contractAddress)) throw new Error("Contract address is invalid.");
+  if (!ethers.isAddress(contractAddress)) {
+    throw new Error("컨트랙트 주소가 올바르지 않습니다.");
+  }
   try {
-    const { signer, address, chainId } = await connectWallet();
+    const { signer, address, chainId } = await connectWallet({ expectedChainId });
     if (expectedChainId && Number(expectedChainId) !== chainId) {
-      throw new Error(`Wrong network. Connected chainId=${chainId}, expected=${expectedChainId}.`);
+      throw new Error(
+        `연결된 네트워크가 다릅니다. 현재 chainId=${chainId}, 필요한 chainId=${expectedChainId}.`
+      );
     }
 
     const contract = new ethers.Contract(contractAddress, ABI, signer);
 
     const existing = await contract.records(pHashBytes32);
     if (existing.creator && existing.creator !== ethers.ZeroAddress) {
-      throw new Error("이미 등록된 이미지입니다.");
+      throw new Error("이미 온체인에 등록된 이미지입니다.");
     }
 
     const nonce = await contract.nonces(address);
     const deadline = Math.floor(Date.now() / 1000) + deadlineSeconds;
+    const normalizedScopes = allowedScopes.map((scope) => normalizeScope(scope));
 
     const domain = {
       name: CONTRACT_NAME,
@@ -205,7 +297,9 @@ export async function registerOriginalContent({
       ],
     };
 
-    const scopeHashes = allowedScopes.map((scope) => ethers.keccak256(ethers.toUtf8Bytes(scope)));
+    const scopeHashes = normalizedScopes.map((scope) =>
+      ethers.keccak256(ethers.toUtf8Bytes(scope))
+    );
     const allowedScopesHash = ethers.keccak256(ethers.concat(scopeHashes));
 
     const value = {
@@ -217,7 +311,13 @@ export async function registerOriginalContent({
     };
 
     const signature = await signer.signTypedData(domain, types, value);
-    const tx = await contract.registerContent(pHashBytes32, address, allowedScopes, deadline, signature);
+    const tx = await contract.registerContent(
+      pHashBytes32,
+      address,
+      normalizedScopes,
+      deadline,
+      signature
+    );
     const receipt = await tx.wait();
     return {
       txHash: tx.hash,
