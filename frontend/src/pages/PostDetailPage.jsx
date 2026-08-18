@@ -10,7 +10,12 @@ export function PostDetailPage() {
   if (!post) {
     return (
       <section className="page container">
-        <p className="empty">게시글을 찾을 수 없습니다.</p>
+        <div className="empty">
+          <p>게시글을 찾을 수 없습니다.</p>
+          <Link to="/feed" className="btn-secondary">
+            피드로 돌아가기
+          </Link>
+        </div>
       </section>
     );
   }
@@ -18,7 +23,7 @@ export function PostDetailPage() {
   return (
     <section className="page container detail">
       <img
-        src={post.imageUrl || "https://placehold.co/1200x700?text=No+Image"}
+        src={post.imageUrl || "/no-image.svg"}
         alt={post.title}
         className="detail-cover"
       />
@@ -31,6 +36,9 @@ export function PostDetailPage() {
       <div className="detail-actions">
         <Link to={`/editor/${post.id}`} className="btn-secondary">
           글 수정하기
+        </Link>
+        <Link to="/feed" className="btn-chip">
+          목록
         </Link>
       </div>
     </section>

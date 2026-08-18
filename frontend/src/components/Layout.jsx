@@ -6,7 +6,7 @@ export function Layout({ children }) {
       <header className="topbar">
         <div className="topbar-inner">
           <Link to="/feed" className="logo">
-            BlockShield Blog
+            BlockShield
           </Link>
           <nav className="nav">
             <NavLink to="/feed" className={({ isActive }) => (isActive ? "active" : "")}>
