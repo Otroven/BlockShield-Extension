@@ -34,10 +34,15 @@ body {
 }
 
 .topbar-inner {
-  height: 68px;
+  min-height: 68px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
+}
+
+.nav {
+  display: flex;
+  margin-left: auto;
 }
 
 .logo {
@@ -62,22 +67,21 @@ body {
 
 .main {
   padding: 24px 0 44px;
+  flex: 1;
 }
 
-.hero {
-  background: linear-gradient(115deg, #06c755 0%, #0ea15e 100%);
-  color: white;
-  border-radius: 16px;
-  padding: 28px;
+.feed-header {
+  margin-bottom: 4px;
 }
 
-.hero h1 {
+.feed-header h1 {
   margin: 0;
+  font-size: 1.6rem;
 }
 
-.hero p {
-  margin: 8px 0 0;
-  opacity: 0.92;
+.feed-header p {
+  margin: 6px 0 0;
+  color: var(--muted);
 }
 
 .search-box {
@@ -177,8 +181,23 @@ body {
   background: #fafafa;
 }
 
+.detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.detail-heading h1 {
+  margin: 0;
+}
+
 .detail-actions {
   margin-top: 14px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .editor-headline {
@@ -408,6 +427,22 @@ body {
   background: var(--brand-dark);
 }
 
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+a.btn-primary,
+a.btn-secondary,
+a.btn-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .btn-secondary {
   background: #eef2ff;
   color: #334155;
@@ -487,6 +522,51 @@ body {
   padding: 22px;
   text-align: center;
   color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.empty p {
+  margin: 0;
+}
+
+.upload-box.is-busy {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.copy-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.copy-label {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.copy-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 860px) {
@@ -498,5 +578,11 @@ body {
   }
   .grid-two {
     grid-template-columns: 1fr;
+  }
+  .copy-row {
+    grid-template-columns: 1fr auto;
+  }
+  .copy-label {
+    grid-column: 1 / -1;
   }
 }
