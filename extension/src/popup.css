@@ -1,0 +1,70 @@
+.popup {
+  width: 320px;
+  padding: 12px;
+  font-family: Arial, sans-serif;
+  color: #0f172a;
+}
+
+h1 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+input[type="text"] {
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+select {
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12px;
+  background: #fff;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#saveBtn {
+  background: #0f172a;
+  color: #fff;
+}
+
+#rescanBtn {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.status {
+  min-height: 18px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #334155;
+}
