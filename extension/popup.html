@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BlockShield 검증기</title>
+    <link rel="stylesheet" href="src/popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <h1>BlockShield 검증기</h1>
+      <label class="row checkbox">
+        <input id="enabled" type="checkbox" />
+        <span>이 브라우저에서 검증 활성화</span>
+      </label>
+
+      <label class="row">
+        <span>컨트랙트 주소</span>
+        <input id="contractAddress" type="text" placeholder="0x..." />
+      </label>
+
+      <label class="row">
+        <span>RPC URL</span>
+        <input id="rpcUrl" type="text" placeholder="http://127.0.0.1:8545" />
+      </label>
+
+      <div class="actions">
+        <button id="saveBtn" type="button">저장</button>
+        <button id="rescanBtn" type="button">페이지 검사</button>
+      </div>
+
+      <p id="statusText" class="status"></p>
+    </main>
+    <script src="src/popup.js"></script>
+  </body>
+  </html>
