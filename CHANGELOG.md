@@ -9,6 +9,10 @@ Version numbers follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `THIRD_PARTY_NOTICES.md` lists runtime, bundled ImageMagick WASM, vendored `forge-std`, and files that must stay out of source archives.
+
 ### Removed
 
 - Leftover local OpenZeppelin tree is gitignored so it cannot re-enter git or a submission zip.
