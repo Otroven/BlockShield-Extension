@@ -47,6 +47,14 @@ interface IOriginalContent {
     );
 
     /**
+     * @notice : Emit when a fingerprint is linked to canonical content id
+     */
+    event FingerprintLinked(
+        bytes32 indexed contentId,
+        bytes32 indexed fingerprint
+    );
+
+    /**
      ************************************************************************************
      *********************************** Define Errors **********************************
      ************************************************************************************
@@ -103,6 +111,25 @@ interface IOriginalContent {
     function registerContent(
         bytes32 pHash,
         address creator,
+        string[] memory allowedScopes,
+        uint256 deadline,
+        bytes memory signature
+    ) external;
+
+    /**
+     * @notice Registers canonical content and links additional fingerprints.
+     * @dev `contentId` is canonical key, `fingerprints` are normalized variants (flip/crop/compress etc).
+     * @param contentId Canonical content id for this original media
+     * @param creator Original creator address that signs typed data
+     * @param fingerprints Additional pHash-like fingerprints to map to canonical content
+     * @param allowedScopes List of host/path scopes authorized to host/display the content
+     * @param deadline Signature expiry timestamp
+     * @param signature EIP-712 typed-data signature from creator
+     */
+    function registerContentBundle(
+        bytes32 contentId,
+        address creator,
+        bytes32[] memory fingerprints,
         string[] memory allowedScopes,
         uint256 deadline,
         bytes memory signature

@@ -12,11 +12,16 @@ contract OriginalContent is IOriginalContent {
         keccak256(
             "RegisterContent(bytes32 pHash,address creator,bytes32 allowedScopesHash,uint256 nonce,uint256 deadline)"
         );
+    bytes32 private constant REGISTER_CONTENT_BUNDLE_TYPEHASH =
+        keccak256(
+            "RegisterContentBundle(bytes32 contentId,address creator,bytes32 fingerprintsHash,bytes32 allowedScopesHash,uint256 nonce,uint256 deadline)"
+        );
     bytes32 private constant NAME_HASH = keccak256(bytes("OriginalContent"));
     bytes32 private constant VERSION_HASH = keccak256(bytes("1"));
 
     mapping(bytes32 pHash => ContentRecord) public records;
     mapping(bytes32 pHash => mapping (string scope => bool isAllowed)) public scopeWhitelist;
+    mapping(bytes32 fingerprint => bytes32 contentId) public canonicalByFingerprint;
     mapping(address creator => uint256 nonce) public nonces;
 
     function registerContent(
@@ -34,7 +39,7 @@ contract OriginalContent is IOriginalContent {
             revert OriginalContent__InvalidCreator();
         }
 
-        if (records[pHash].creator != address(0)) {
+        if (_contentExists(pHash)) {
             revert OriginalContent__ContentAlreadyRegistered();
         }
 
@@ -50,21 +55,88 @@ contract OriginalContent is IOriginalContent {
         }
         nonces[creator] = nonce + 1;
 
-        
-        records[pHash] = ContentRecord({
+        _registerCanonicalContent(pHash, creator, allowedScopes);
+        _linkFingerprint(pHash, pHash);
+    }
+
+    function registerContentBundle(
+        bytes32 contentId,
+        address creator,
+        bytes32[] memory fingerprints,
+        string[] memory allowedScopes,
+        uint256 deadline,
+        bytes memory signature
+    ) external {
+        if (contentId == bytes32(0)) {
+            revert OriginalContent__InvalidZeroPHash();
+        }
+
+        if (creator == address(0)) {
+            revert OriginalContent__InvalidCreator();
+        }
+
+        if (_contentExists(contentId)) {
+            revert OriginalContent__ContentAlreadyRegistered();
+        }
+
+        if (block.timestamp > deadline) {
+            revert OriginalContent__SignatureExpired();
+        }
+
+        for (uint256 i = 0; i < fingerprints.length; i++) {
+            if (fingerprints[i] == bytes32(0)) {
+                revert OriginalContent__InvalidZeroPHash();
+            }
+            if (_contentExists(fingerprints[i])) {
+                revert OriginalContent__ContentAlreadyRegistered();
+            }
+        }
+
+        uint256 nonce = nonces[creator];
+        bytes32 digest = _buildBundleDigest(contentId, creator, fingerprints, allowedScopes, nonce, deadline);
+        address recoveredSigner = _recoverSigner(digest, signature);
+        if (recoveredSigner != creator) {
+            revert OriginalContent__InvalidSignature();
+        }
+        nonces[creator] = nonce + 1;
+
+        _registerCanonicalContent(contentId, creator, allowedScopes);
+        _linkFingerprint(contentId, contentId);
+        for (uint256 i = 0; i < fingerprints.length; i++) {
+            _linkFingerprint(contentId, fingerprints[i]);
+        }
+    }
+
+    function _registerCanonicalContent(
+        bytes32 contentId,
+        address creator,
+        string[] memory allowedScopes
+    ) private {
+        records[contentId] = ContentRecord({
             creator: creator,
-            pHash: pHash,
+            pHash: contentId,
             createdAt: block.timestamp,
             isActive: true
         });
 
         for (uint256 i = 0; i < allowedScopes.length; i++) {
             string memory normalizedScope = _normalizeScope(allowedScopes[i]);
-            scopeWhitelist[pHash][normalizedScope] = true;
-            emit WhitelistAdded(pHash, normalizedScope);
+            scopeWhitelist[contentId][normalizedScope] = true;
+            emit WhitelistAdded(contentId, normalizedScope);
         }
 
-        emit ContentRegistered(pHash, creator, block.timestamp);
+        emit ContentRegistered(contentId, creator, block.timestamp);
+    }
+
+    function _linkFingerprint(bytes32 contentId, bytes32 fingerprint) private {
+        bytes32 mapped = canonicalByFingerprint[fingerprint];
+        if (mapped != bytes32(0) && mapped != contentId) {
+            revert OriginalContent__ContentAlreadyRegistered();
+        }
+
+        canonicalByFingerprint[fingerprint] = contentId;
+        records[fingerprint] = records[contentId];
+        emit FingerprintLinked(contentId, fingerprint);
     }
 
     function updateWhitelist(
@@ -72,35 +144,51 @@ contract OriginalContent is IOriginalContent {
         string memory scope,
         bool allowed
     ) external {
-        if (records[pHash].creator == address(0)) {
+        bytes32 contentId = _resolveContentId(pHash);
+        if (records[contentId].creator == address(0)) {
             revert OriginalContent__ContentNotRegistered();
         }
 
-        if (records[pHash].creator != msg.sender) {
+        if (records[contentId].creator != msg.sender) {
             revert OriginalContent__NotContentCreator();
         }
 
         string memory normalizedScope = _normalizeScope(scope);
 
-        scopeWhitelist[pHash][normalizedScope] = allowed;
-        emit WhitelistUpdated(pHash, normalizedScope, allowed);
+        scopeWhitelist[contentId][normalizedScope] = allowed;
+        emit WhitelistUpdated(contentId, normalizedScope, allowed);
     }
 
     function getContent(bytes32 pHash) external view returns (ContentRecord memory) {
-        if (records[pHash].creator == address(0)) {
+        bytes32 contentId = _resolveContentId(pHash);
+        if (records[contentId].creator == address(0)) {
             revert OriginalContent__ContentNotExists();
         }
 
-        return records[pHash];
+        return records[contentId];
     }
 
     function isScopeWhitelisted(bytes32 pHash, string memory scope) external view returns (bool) {
-        if (records[pHash].creator == address(0)) {
+        bytes32 contentId = _resolveContentId(pHash);
+        if (records[contentId].creator == address(0)) {
             revert OriginalContent__ContentNotExists();
         }
 
         string memory normalizedScope = _normalizeScope(scope);
-        return scopeWhitelist[pHash][normalizedScope];
+        return scopeWhitelist[contentId][normalizedScope];
+    }
+
+    function _resolveContentId(bytes32 fingerprint) private view returns (bytes32) {
+        bytes32 canonical = canonicalByFingerprint[fingerprint];
+        if (canonical != bytes32(0)) {
+            return canonical;
+        }
+        return fingerprint;
+    }
+
+    function _contentExists(bytes32 fingerprint) private view returns (bool) {
+        bytes32 contentId = _resolveContentId(fingerprint);
+        return records[contentId].creator != address(0);
     }
 
     function _buildDigest(
@@ -127,6 +215,28 @@ contract OriginalContent is IOriginalContent {
         return keccak256(
             abi.encode(EIP712_DOMAIN_TYPEHASH, NAME_HASH, VERSION_HASH, block.chainid, address(this))
         );
+    }
+
+    function _buildBundleDigest(
+        bytes32 contentId,
+        address creator,
+        bytes32[] memory fingerprints,
+        string[] memory allowedScopes,
+        uint256 nonce,
+        uint256 deadline
+    ) private view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                REGISTER_CONTENT_BUNDLE_TYPEHASH,
+                contentId,
+                creator,
+                keccak256(abi.encodePacked(fingerprints)),
+                _hashAllowedScopes(allowedScopes),
+                nonce,
+                deadline
+            )
+        );
+        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
     }
 
     function _hashAllowedScopes(string[] memory allowedScopes) private pure returns (bytes32) {
