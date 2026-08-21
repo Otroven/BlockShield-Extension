@@ -87,6 +87,11 @@ contract OriginalContent is IOriginalContent {
             if (fingerprints[i] == bytes32(0)) {
                 revert OriginalContent__InvalidZeroPHash();
             }
+            for (uint256 j = i + 1; j < fingerprints.length; j++) {
+                if (fingerprints[i] == fingerprints[j]) {
+                    revert OriginalContent__ContentAlreadyRegistered();
+                }
+            }
             if (_contentExists(fingerprints[i])) {
                 revert OriginalContent__ContentAlreadyRegistered();
             }

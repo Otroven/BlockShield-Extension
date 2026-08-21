@@ -360,6 +360,34 @@ contract OriginalContentUnitTest is Test {
         );
     }
 
+    function testRegisterContentBundleRevertsWhenInputFingerprintsContainDuplicates() public {
+        bytes32 contentId = keccak256("content-dup-in-request");
+        bytes32 duplicateFingerprint = keccak256("content-dup-in-request-fp");
+        bytes32[] memory fingerprints = new bytes32[](2);
+        fingerprints[0] = duplicateFingerprint;
+        fingerprints[1] = duplicateFingerprint;
+        uint256 deadline = block.timestamp + 1 days;
+        bytes memory signature = _signRegisterBundlePayload(
+            s_creatorKey,
+            contentId,
+            s_creator,
+            fingerprints,
+            s_sampleAllowedScopes,
+            originalContent.nonces(s_creator),
+            deadline
+        );
+
+        vm.expectRevert(IOriginalContent.OriginalContent__ContentAlreadyRegistered.selector);
+        originalContent.registerContentBundle(
+            contentId,
+            s_creator,
+            fingerprints,
+            s_sampleAllowedScopes,
+            deadline,
+            signature
+        );
+    }
+
     function _registerContent(
         bytes32 pHash,
         address creator,
