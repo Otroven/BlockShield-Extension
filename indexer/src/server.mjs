@@ -272,8 +272,13 @@ async function main() {
   }
 
   const provider = new ethers.JsonRpcProvider(RPC_URL);
+  let isSyncing = false;
 
   async function runSync() {
+    if (isSyncing) {
+      return;
+    }
+    isSyncing = true;
     try {
       const report = await syncOnce(provider, CONTRACT_ADDRESS);
       console.log(
@@ -281,6 +286,8 @@ async function main() {
       );
     } catch (error) {
       console.error("[sync] failed:", error.message);
+    } finally {
+      isSyncing = false;
     }
   }
 
