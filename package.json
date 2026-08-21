@@ -1,0 +1,11 @@
+{
+  "name": "block-shield-extension-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "chain:deploy": "node ./scripts/start-chain-and-deploy.mjs",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "indexer:dev": "npm --prefix indexer run dev",
+    "indexer:start": "node ./scripts/start-indexer.mjs"
+  }
+}

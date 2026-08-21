@@ -3,7 +3,9 @@ import {
   CHAIN_ID,
   CHAIN_NAME,
   CONTRACT_ADDRESS,
+  INDEXER_URL,
   RPC_URL,
+  SIMILARITY_THRESHOLD,
   toHexChainId,
 } from "./config";
 
@@ -67,6 +69,117 @@ function requireEthereum() {
     );
   }
   return window.ethereum;
+}
+
+function normalizeIndexerUrl(url) {
+  if (typeof url !== "string") return "";
+  const trimmed = url.trim();
+  if (!trimmed || !/^https?:\/\//i.test(trimmed)) return "";
+  try {
+    const parsed = new URL(trimmed);
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+}
+
+function normalizeThreshold(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 10;
+  if (num < 0) return 0;
+  if (num > 64) return 64;
+  return Math.trunc(num);
+}
+
+function normalizeFingerprints(fingerprints) {
+  if (!Array.isArray(fingerprints)) return [];
+  const seen = new Set();
+  const output = [];
+  for (const fp of fingerprints) {
+    if (typeof fp !== "string") continue;
+    const lower = fp.toLowerCase();
+    if (!/^0x[0-9a-f]{64}$/.test(lower)) continue;
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    output.push(lower);
+  }
+  return output;
+}
+
+export async function checkSimilarityConflict({
+  indexerUrl = INDEXER_URL,
+  fingerprints = [],
+  threshold = SIMILARITY_THRESHOLD,
+  creatorAddress,
+}) {
+  const endpoint = normalizeIndexerUrl(indexerUrl);
+  if (!endpoint) return null;
+
+  const normalized = normalizeFingerprints(fingerprints);
+  if (!normalized.length) return null;
+
+  let payload;
+  try {
+    const res = await fetch(`${endpoint}/match`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fingerprints: normalized,
+        threshold: normalizeThreshold(threshold),
+        limit: 50,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    payload = await res.json();
+  } catch (error) {
+    throw new Error(
+      `유사도 게이트 검사에 실패했습니다. 인덱서(${endpoint}) 실행 상태를 확인하세요. (${error.message || "unknown"})`
+    );
+  }
+
+  const currentCreator = String(creatorAddress || "").toLowerCase();
+  if (!currentCreator) return null;
+
+  const matches = Array.isArray(payload?.matches)
+    ? payload.matches
+    : payload?.match
+      ? [payload.match]
+      : [];
+
+  const normalizedMatches = matches
+    .map((item) => ({
+      creator: String(item?.creator || "").toLowerCase(),
+      distance: Number(item?.distance),
+      createdAt: Number(item?.createdAt),
+      contentId: String(item?.contentId || ""),
+      indexedFingerprint: String(item?.indexedFingerprint || ""),
+    }))
+    .filter(
+      (item) =>
+        item.creator &&
+        Number.isFinite(item.distance) &&
+        Number.isFinite(item.createdAt)
+    )
+    .sort((a, b) => {
+      if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+      return a.distance - b.distance;
+    });
+
+  const conflict = normalizedMatches.find((item) => item.creator !== currentCreator);
+  if (!conflict) return null;
+
+  return {
+    creator: conflict.creator,
+    distance: Math.trunc(conflict.distance),
+    createdAt: Math.trunc(conflict.createdAt),
+    contentId: conflict.contentId,
+    indexedFingerprint: conflict.indexedFingerprint,
+  };
 }
 
 function validateHost(host, originalInput) {

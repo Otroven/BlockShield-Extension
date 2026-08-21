@@ -24,6 +24,24 @@
         <input id="rpcUrl" type="text" placeholder="http://127.0.0.1:8545" />
       </label>
 
+      <label class="row">
+        <span>인덱서 API URL</span>
+        <input id="indexerUrl" type="text" placeholder="http://127.0.0.1:8787" />
+      </label>
+
+      <label class="row">
+        <span>스코프 불일치 표시</span>
+        <select id="scopePolicy">
+          <option value="strict">도용 의심으로 표시</option>
+          <option value="neutral">미승인 스코프로 표시</option>
+        </select>
+      </label>
+
+      <label class="row">
+        <span>유사도 임계값 (해밍 거리)</span>
+        <input id="similarityThreshold" type="number" min="0" max="64" step="1" />
+      </label>
+
       <div class="actions">
         <button id="saveBtn" type="button">저장</button>
         <button id="rescanBtn" type="button">페이지 검사</button>

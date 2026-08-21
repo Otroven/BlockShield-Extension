@@ -1,7 +1,10 @@
 const DEFAULT_OPTIONS = {
   enabled: true,
+  scopePolicy: "strict",
+  similarityThreshold: 10,
   contractAddress: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-  rpcUrl: "http://127.0.0.1:8545"
+  rpcUrl: "http://127.0.0.1:8545",
+  indexerUrl: "http://127.0.0.1:8787"
 };
 
 function getStorage(keys) {
@@ -44,14 +47,21 @@ async function init() {
   const saved = await getStorage(DEFAULT_OPTIONS);
   const options = { ...DEFAULT_OPTIONS, ...saved };
   document.getElementById("enabled").checked = Boolean(options.enabled);
+  document.getElementById("scopePolicy").value =
+    options.scopePolicy === "neutral" ? "neutral" : "strict";
+  document.getElementById("similarityThreshold").value = Number(options.similarityThreshold ?? 10);
   document.getElementById("contractAddress").value = options.contractAddress;
   document.getElementById("rpcUrl").value = options.rpcUrl;
+  document.getElementById("indexerUrl").value = options.indexerUrl ?? "";
 }
 
 async function saveOptions() {
   const enabled = document.getElementById("enabled").checked;
+  const scopePolicy = document.getElementById("scopePolicy").value;
+  const similarityThreshold = Number(document.getElementById("similarityThreshold").value);
   const contractAddress = document.getElementById("contractAddress").value.trim();
   const rpcUrl = document.getElementById("rpcUrl").value.trim();
+  const indexerUrl = document.getElementById("indexerUrl").value.trim();
 
   if (!contractAddress.startsWith("0x") || contractAddress.length !== 42) {
     setStatus("컨트랙트 주소 형식이 올바르지 않습니다.", true);
@@ -61,7 +71,27 @@ async function saveOptions() {
     setStatus("RPC URL은 http:// 또는 https:// 로 시작해야 합니다.", true);
     return;
   }
-  await setStorage({ enabled, contractAddress, rpcUrl });
+  if (indexerUrl && !/^https?:\/\//i.test(indexerUrl)) {
+    setStatus("인덱서 URL은 http:// 또는 https:// 로 시작해야 합니다.", true);
+    return;
+  }
+  if (scopePolicy !== "strict" && scopePolicy !== "neutral") {
+    setStatus("스코프 불일치 표시 설정이 올바르지 않습니다.", true);
+    return;
+  }
+  if (!Number.isFinite(similarityThreshold) || similarityThreshold < 0 || similarityThreshold > 64) {
+    setStatus("유사도 임계값은 0~64 사이 정수여야 합니다.", true);
+    return;
+  }
+
+  await setStorage({
+    enabled,
+    scopePolicy,
+    similarityThreshold: Math.trunc(similarityThreshold),
+    contractAddress,
+    rpcUrl,
+    indexerUrl
+  });
   const response = await sendMessage({ action: "optionsUpdated" });
   if (!response?.ok) {
     throw new Error(response?.error || "열린 탭에 설정 반영에 실패했습니다.");

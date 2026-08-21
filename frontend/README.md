@@ -28,6 +28,9 @@ Used env values:
 
 - `VITE_CONTRACT_ADDRESS`
 - `VITE_CHAIN_ID`
+- `VITE_RPC_URL`
+- `VITE_INDEXER_URL`
+- `VITE_SIMILARITY_THRESHOLD`
 
 ## Local testing storage strategy
 
