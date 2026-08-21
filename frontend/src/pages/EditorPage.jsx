@@ -3,10 +3,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { CopyRow } from "../components/CopyRow";
 import { useBlog } from "../context/BlogContext";
 import { useWallet } from "../context/WalletContext";
-import { CHAIN_ID, CONTRACT_ADDRESS } from "../lib/config";
+import { CHAIN_ID, CONTRACT_ADDRESS, SIMILARITY_THRESHOLD } from "../lib/config";
 import { computePerceptualHashFromFile } from "../lib/phash";
 import {
   buildPostScope,
+  checkSimilarityConflict,
   normalizeScope,
   registerOriginalContent,
   updateContentScopes,
@@ -216,6 +217,17 @@ export function EditorPage({ mode }) {
       let onchain = alreadyOnchain;
 
       if (willRegister) {
+        const conflict = await checkSimilarityConflict({
+          creatorAddress: wallet?.address,
+          fingerprints: [pHash],
+          threshold: SIMILARITY_THRESHOLD,
+        });
+        if (conflict) {
+          throw new Error(
+            `유사도 게이트에서 차단되었습니다. 선등록자(${conflict.creator})의 이미지와 매우 유사합니다. (해밍 거리 ${conflict.distance})`
+          );
+        }
+
         chainResult = await registerOriginalContent({
           contractAddress: CONTRACT_ADDRESS,
           expectedChainId: CHAIN_ID,

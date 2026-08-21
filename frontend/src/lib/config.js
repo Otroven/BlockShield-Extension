@@ -6,6 +6,10 @@ export const CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID || 31337);
 
 export const RPC_URL = import.meta.env.VITE_RPC_URL || "http://127.0.0.1:8545";
 
+export const INDEXER_URL = import.meta.env.VITE_INDEXER_URL || "http://127.0.0.1:8787";
+
+export const SIMILARITY_THRESHOLD = Number(import.meta.env.VITE_SIMILARITY_THRESHOLD || 10);
+
 export const CHAIN_NAME = import.meta.env.VITE_CHAIN_NAME || "BlockShield Local";
 
 export function toHexChainId(chainId = CHAIN_ID) {
