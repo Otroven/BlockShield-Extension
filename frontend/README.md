@@ -36,8 +36,14 @@ Used env values:
 
 For local-only development, this project stores data in browser `localStorage`:
 
-- posts: `blockshield:react-posts:v1`
-- profile: `blockshield:react-profile:v1`
-- web3 settings: `blockshield:web3-settings:v2`
+- posts (current): `blockshield:react-posts:v2`
 
 This is the fastest option for UI/flow testing before API/DB is ready.
+
+### Reset local storage quickly
+
+Open:
+
+- `http://localhost:5173/feed?resetStorage=1`
+
+This clears all `localStorage` keys that start with `blockshield:`.
