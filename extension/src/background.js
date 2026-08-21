@@ -1,7 +1,10 @@
 const DEFAULT_OPTIONS = {
   enabled: true,
+  scopePolicy: "strict",
+  similarityThreshold: 10,
   contractAddress: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-  rpcUrl: "http://127.0.0.1:8545"
+  rpcUrl: "http://127.0.0.1:8545",
+  indexerUrl: "http://127.0.0.1:8787"
 };
 
 const SELECTORS = {
@@ -12,6 +15,8 @@ const SELECTORS = {
 const ERROR_SELECTORS = {
   contentNotExists: "0xc52993ed"
 };
+const SIMILARITY_INDEX_KEY = "similarityIndex";
+const MAX_INDEX_SIZE = 2000;
 
 chrome.runtime.onInstalled.addListener(async () => {
   const saved = await storageGet(DEFAULT_OPTIONS);
@@ -57,32 +62,203 @@ async function broadcastOptionsChanged() {
   await Promise.all(tasks);
 }
 
-async function verifyImagePayload({ imageUrl, pHashBytes32, pageUrl }) {
+async function verifyImagePayload({ fingerprints, pageUrl }) {
   const options = { ...DEFAULT_OPTIONS, ...(await storageGet(DEFAULT_OPTIONS)) };
   if (!options.enabled) return { status: "disabled" };
 
-  const pHash = pHashBytes32;
-  if (!pHash) {
+  const normalizedFingerprints = normalizeFingerprints(fingerprints);
+  if (!normalizedFingerprints.length) {
     return { status: "skipped", reason: "hash-unavailable" };
   }
   const pageScope = buildScopeFromPageUrl(pageUrl, true);
   const hostScope = buildScopeFromPageUrl(pageUrl, false);
 
-  const content = await readContent(options, pHash);
-  if (!content.exists) {
-    return { status: "unregistered", pHash };
+  const exact = await findExactMatch(options, normalizedFingerprints, pageScope, hostScope);
+  if (exact) {
+    return exact;
   }
 
-  const allowedPage = await isScopeAllowed(options, pHash, pageScope);
-  const allowedHost = pageScope === hostScope ? allowedPage : await isScopeAllowed(options, pHash, hostScope);
+  const fromIndexer = await findNearestSimilarByIndexer(
+    normalizedFingerprints,
+    options.similarityThreshold,
+    options.indexerUrl
+  );
+  const nearest = fromIndexer || (await findNearestSimilar(normalizedFingerprints, options.similarityThreshold));
+  if (nearest) {
+    return {
+      status: "similar_suspect",
+      pHash: normalizedFingerprints[0],
+      creator: nearest.creator,
+      similarTo: nearest.pHash,
+      distance: nearest.distance
+    };
+  }
 
+  return { status: "unregistered", pHash: normalizedFingerprints[0] };
+}
+
+function normalizeFingerprints(fingerprints) {
+  if (!Array.isArray(fingerprints)) return [];
+  const seen = new Set();
+  const normalized = [];
+  for (const hash of fingerprints) {
+    if (typeof hash !== "string") continue;
+    const lower = hash.toLowerCase();
+    if (!/^0x[0-9a-f]{64}$/.test(lower)) continue;
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    normalized.push(lower);
+  }
+  return normalized;
+}
+
+async function findExactMatch(options, fingerprints, pageScope, hostScope) {
+  let scopeMismatch = null;
+  for (const pHash of fingerprints) {
+    const content = await readContent(options, pHash);
+    if (!content.exists) continue;
+
+    await upsertSimilarityIndexEntry(pHash, content.creator);
+
+    const allowedPage = await isScopeAllowed(options, pHash, pageScope);
+    const allowedHost = pageScope === hostScope ? allowedPage : await isScopeAllowed(options, pHash, hostScope);
+    if (allowedPage || allowedHost) {
+      return {
+        status: "original",
+        pHash,
+        creator: content.creator,
+        createdAt: content.createdAt,
+        matchedScope: allowedPage ? pageScope : hostScope
+      };
+    }
+
+    if (!scopeMismatch) {
+      scopeMismatch = {
+        pHash,
+        creator: content.creator,
+        createdAt: content.createdAt
+      };
+    }
+  }
+
+  if (!scopeMismatch) return null;
   return {
-    status: allowedPage || allowedHost ? "original" : "suspicious",
-    pHash,
-    creator: content.creator,
-    createdAt: content.createdAt,
-    matchedScope: allowedPage ? pageScope : allowedHost ? hostScope : ""
+    status: options.scopePolicy === "neutral" ? "scope_mismatch" : "suspicious",
+    ...scopeMismatch
   };
+}
+
+async function findNearestSimilar(fingerprints, thresholdInput) {
+  const index = await getSimilarityIndex();
+  if (!index.length) return null;
+
+  const threshold = clampThreshold(thresholdInput);
+  let best = null;
+  for (const fp of fingerprints) {
+    for (const entry of index) {
+      const distance = hammingDistance(fp, entry.pHash);
+      if (distance > threshold) continue;
+      if (!best || distance < best.distance) {
+        best = {
+          pHash: entry.pHash,
+          creator: entry.creator,
+          distance
+        };
+      }
+    }
+  }
+  return best;
+}
+
+async function findNearestSimilarByIndexer(fingerprints, thresholdInput, indexerUrl) {
+  const endpoint = normalizeIndexerUrl(indexerUrl);
+  if (!endpoint) return null;
+
+  try {
+    const threshold = clampThreshold(thresholdInput);
+    const res = await fetch(`${endpoint}/match`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fingerprints, threshold })
+    });
+    if (!res.ok) return null;
+    const payload = await res.json();
+    if (!payload?.ok || !payload.match) return null;
+    const match = payload.match;
+    if (typeof match.indexedFingerprint !== "string") return null;
+    if (typeof match.creator !== "string") return null;
+    if (!Number.isFinite(Number(match.distance))) return null;
+    return {
+      pHash: match.indexedFingerprint.toLowerCase(),
+      creator: match.creator.toLowerCase(),
+      distance: Math.trunc(Number(match.distance))
+    };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeIndexerUrl(url) {
+  if (typeof url !== "string") return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+  try {
+    const parsed = new URL(trimmed);
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+    parsed.hash = "";
+    parsed.search = "";
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function clampThreshold(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 10;
+  if (num < 0) return 0;
+  if (num > 64) return 64;
+  return Math.trunc(num);
+}
+
+function hammingDistance(a, b) {
+  let xor = BigInt(a) ^ BigInt(b);
+  let count = 0;
+  while (xor > 0n) {
+    xor &= xor - 1n;
+    count++;
+  }
+  return count;
+}
+
+async function getSimilarityIndex() {
+  const data = await storageLocalGet({ [SIMILARITY_INDEX_KEY]: [] });
+  const raw = data[SIMILARITY_INDEX_KEY];
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (item) =>
+      item &&
+      typeof item.pHash === "string" &&
+      /^0x[0-9a-f]{64}$/.test(item.pHash) &&
+      typeof item.creator === "string"
+  );
+}
+
+async function upsertSimilarityIndexEntry(pHash, creator) {
+  const index = await getSimilarityIndex();
+  const now = Date.now();
+  const normalizedCreator = (creator || "").toLowerCase();
+  const idx = index.findIndex((item) => item.pHash === pHash);
+  if (idx >= 0) {
+    index[idx] = { ...index[idx], creator: normalizedCreator, updatedAt: now };
+  } else {
+    index.unshift({ pHash, creator: normalizedCreator, updatedAt: now });
+  }
+  if (index.length > MAX_INDEX_SIZE) {
+    index.length = MAX_INDEX_SIZE;
+  }
+  await storageLocalSet({ [SIMILARITY_INDEX_KEY]: index });
 }
 
 function buildScopeFromPageUrl(pageUrl, includePath) {
@@ -186,6 +362,18 @@ function storageGet(keys) {
 function storageSet(values) {
   return new Promise((resolve) => {
     chrome.storage.sync.set(values, resolve);
+  });
+}
+
+function storageLocalGet(keys) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(keys, (result) => resolve(result));
+  });
+}
+
+function storageLocalSet(values) {
+  return new Promise((resolve) => {
+    chrome.storage.local.set(values, resolve);
   });
 }
 

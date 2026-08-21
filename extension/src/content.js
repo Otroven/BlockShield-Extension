@@ -7,10 +7,12 @@ const SCAN_STYLE_ID = "blockshield-scan-style";
 const BADGE_STYLE_BY_STATUS = {
   checking: { bg: "#1d4ed8", fg: "#ffffff", text: "BlockShield | 검증 중" },
   original: { bg: "#15803d", fg: "#ffffff", text: "BlockShield | 원본 확인" },
+  scope_mismatch: { bg: "#b45309", fg: "#ffffff", text: "BlockShield | 등록 원본(미승인 스코프)" },
   suspicious: { bg: "#b91c1c", fg: "#ffffff", text: "BlockShield | 도용 의심" },
+  similar_suspect: { bg: "#dc2626", fg: "#ffffff", text: "BlockShield | 유사 도용 의심" },
   unregistered: { bg: "#475569", fg: "#ffffff", text: "BlockShield | 미등록" },
   error: { bg: "#c2410c", fg: "#ffffff", text: "BlockShield | 검증 실패" },
-  skipped: { bg: "#334155", fg: "#ffffff", text: "BlockShield | 건너뜀" },
+  skipped: { bg: "#334155", fg: "#ffffff", text: "BlockShield | 건너뜀" }
 };
 
 let extensionEnabled = true;
@@ -85,9 +87,9 @@ async function verifyImage(img) {
   }
 
   upsertBadge(img, "checking", "");
-  let pHashBytes32 = "";
+  let fingerprintBundle;
   try {
-    pHashBytes32 = await computePerceptualHashBytes32WithPhashJs(img, src);
+    fingerprintBundle = await computeFingerprintBundle(img, src);
   } catch (error) {
     upsertBadge(img, "error", error?.message || "pHash 검증에 실패했습니다.");
     return;
@@ -95,9 +97,8 @@ async function verifyImage(img) {
 
   const response = await sendMessage({
     action: "verifyImagePayload",
-    imageUrl: src,
-    pHashBytes32,
-    pageUrl: window.location.href,
+    fingerprints: fingerprintBundle.fingerprints,
+    pageUrl: window.location.href
   });
 
   if (!response?.ok) {
@@ -119,11 +120,29 @@ async function verifyImage(img) {
     return;
   }
 
+  if (result.status === "scope_mismatch") {
+    upsertBadge(
+      img,
+      "scope_mismatch",
+      `이 이미지의 원본은 등록되어 있지만, 현재 페이지는 원작자 허용 스코프에 포함되지 않습니다.\n\n원작자(주소) : ${result.creator || "-"}`
+    );
+    return;
+  }
+
   if (result.status === "suspicious") {
     upsertBadge(
       img,
       "suspicious",
       `이 글의 저자는 이미지의 원작자가 아닌 것으로 보입니다.\n\n원작자(주소) : ${result.creator || "-"}\n`,
+    );
+    return;
+  }
+
+  if (result.status === "similar_suspect") {
+    upsertBadge(
+      img,
+      "similar_suspect",
+      `등록된 원본과 매우 유사한 이미지가 감지되었습니다.\n\n원작자(주소) : ${result.creator || "-"}\n해밍 거리 : ${result.distance}\n기준 pHash : ${result.similarTo || "-"}`
     );
     return;
   }
@@ -369,21 +388,38 @@ function showScanOverlay() {
   };
 }
 
-async function computePerceptualHashBytes32WithPhashJs(img, src) {
+async function computeFingerprintBundle(img, src) {
   const phash = await ensurePhashLibrary();
   const fileLike = await buildFileLikeForPhash(img, src);
-  const hash = await phash.hash(fileLike);
+  const primary = await hashFileWithPhash(phash, fileLike);
+  const fingerprints = [primary];
+
+  const variants = await buildVariantFileLikesFromImage(img, src);
+  for (const variant of variants) {
+    try {
+      const hash = await hashFileWithPhash(phash, variant);
+      if (!fingerprints.includes(hash)) {
+        fingerprints.push(hash);
+      }
+    } catch {
+      // Skip invalid variant hash and continue.
+    }
+  }
+
+  return { primary, fingerprints };
+}
+
+async function hashFileWithPhash(phash, file) {
+  const hash = await phash.hash(file);
   const binary =
     typeof hash?.toBinary === "function"
       ? hash.toBinary()
       : typeof hash?.value === "string"
         ? hash.value
         : "";
-
   if (!binary || !/^[01]+$/.test(binary)) {
     throw new Error("이 이미지 소스에서 pHash를 계산할 수 없습니다.");
   }
-
   return binaryToBytes32(binary);
 }
 
@@ -404,6 +440,53 @@ async function buildFileLikeForPhash(img, src) {
   throw new Error(
     "브라우저 보안 정책으로 인해 이미지 소스에 접근할 수 없습니다.",
   );
+}
+
+async function buildVariantFileLikesFromImage(img, src) {
+  const variants = [];
+  const flipped = await transformImageToFile(img, src, (ctx, w, h) => {
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, 0, 0, w, h);
+  }, "flip");
+  if (flipped) variants.push(flipped);
+
+  const cropped = await transformImageToFile(img, src, (ctx, w, h) => {
+    const cropRatio = 0.85;
+    const cw = Math.floor(w * cropRatio);
+    const ch = Math.floor(h * cropRatio);
+    const sx = Math.floor((w - cw) / 2);
+    const sy = Math.floor((h - ch) / 2);
+    ctx.drawImage(img, sx, sy, cw, ch, 0, 0, w, h);
+  }, "crop");
+  if (cropped) variants.push(cropped);
+
+  return variants;
+}
+
+async function transformImageToFile(img, src, drawFn, suffix) {
+  try {
+    const width = img.naturalWidth || img.width || 0;
+    const height = img.naturalHeight || img.height || 0;
+    if (!width || !height) return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    drawFn(ctx, width, height);
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob((result) => resolve(result), "image/png");
+    });
+    if (!blob) return null;
+
+    const ext = guessExtensionFromBlob(blob) || guessExtensionFromSrc(src) || "png";
+    return new File([blob], `blockshield-image-${suffix}.${ext}`, {
+      type: blob.type || `image/${ext}`
+    });
+  } catch {
+    return null;
+  }
 }
 
 async function fetchBlobFromSource(src) {
