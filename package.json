@@ -6,6 +6,7 @@
     "chain:deploy": "node ./scripts/start-chain-and-deploy.mjs",
     "frontend:dev": "npm --prefix frontend run dev",
     "indexer:dev": "npm --prefix indexer run dev",
-    "indexer:start": "node ./scripts/start-indexer.mjs"
+    "indexer:start": "node ./scripts/start-indexer.mjs",
+    "dev:restart": "node ./scripts/restart-dev-stack.mjs"
   }
 }
