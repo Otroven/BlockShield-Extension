@@ -45,6 +45,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "resetExtensionStorage") {
+    resetExtensionStorage()
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) =>
+        sendResponse({ ok: false, error: error?.message || "확장 초기화에 실패했습니다." })
+      );
+    return true;
+  }
+
   return false;
 });
 
@@ -60,6 +69,28 @@ async function broadcastOptionsChanged() {
       }).catch(() => undefined)
     );
   await Promise.all(tasks);
+}
+
+async function broadcastResetState(enabled) {
+  const tabs = await chrome.tabs.query({});
+  const tasks = tabs
+    .filter((tab) => typeof tab.id === "number")
+    .map((tab) =>
+      chrome.tabs
+        .sendMessage(tab.id, {
+          action: "blockshieldResetState",
+          enabled: Boolean(enabled)
+        })
+        .catch(() => undefined)
+    );
+  await Promise.all(tasks);
+}
+
+async function resetExtensionStorage() {
+  await storageSet({ ...DEFAULT_OPTIONS });
+  await storageLocalRemove([SIMILARITY_INDEX_KEY]);
+  await broadcastOptionsChanged();
+  await broadcastResetState(DEFAULT_OPTIONS.enabled);
 }
 
 async function verifyImagePayload({ fingerprints, pageUrl }) {
@@ -374,6 +405,12 @@ function storageLocalGet(keys) {
 function storageLocalSet(values) {
   return new Promise((resolve) => {
     chrome.storage.local.set(values, resolve);
+  });
+}
+
+function storageLocalRemove(keys) {
+  return new Promise((resolve) => {
+    chrome.storage.local.remove(keys, resolve);
   });
 }
 

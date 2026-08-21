@@ -106,6 +106,20 @@ async function rescanTab() {
   setStatus("현재 페이지 검사를 요청했습니다.");
 }
 
+async function resetExtensionStorage() {
+  const confirmed = window.confirm(
+    "확장 설정과 유사도 캐시를 기본값으로 초기화할까요?"
+  );
+  if (!confirmed) return;
+
+  const response = await sendMessage({ action: "resetExtensionStorage" });
+  if (!response?.ok) {
+    throw new Error(response?.error || "확장 초기화에 실패했습니다.");
+  }
+  await init();
+  setStatus("확장 설정/캐시를 초기화했습니다.");
+}
+
 document.getElementById("saveBtn").addEventListener("click", async () => {
   try {
     await saveOptions();
@@ -119,6 +133,14 @@ document.getElementById("rescanBtn").addEventListener("click", async () => {
     await rescanTab();
   } catch (error) {
     setStatus(error.message || "페이지 검사 요청에 실패했습니다.", true);
+  }
+});
+
+document.getElementById("resetBtn").addEventListener("click", async () => {
+  try {
+    await resetExtensionStorage();
+  } catch (error) {
+    setStatus(error.message || "초기화 요청에 실패했습니다.", true);
   }
 });
 

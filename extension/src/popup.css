@@ -48,6 +48,7 @@ select {
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -67,6 +68,11 @@ button {
 #rescanBtn {
   background: #e2e8f0;
   color: #0f172a;
+}
+
+#resetBtn {
+  background: #fee2e2;
+  color: #7f1d1d;
 }
 
 .status {

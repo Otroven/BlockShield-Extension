@@ -29,8 +29,10 @@ Open the extension popup:
 
 - `Contract address`: deployed `OriginalContent` contract
 - `RPC URL`: JSON-RPC endpoint
+- `Indexer API URL`: similarity indexer endpoint (e.g. `http://127.0.0.1:8787`)
 - `Enable scanning`: on/off
 - `Page scan`: manually run scanning for the current page
+- `초기화`: reset extension settings (`chrome.storage.sync`) and local similarity cache (`chrome.storage.local`)
 
 ## Notes
 

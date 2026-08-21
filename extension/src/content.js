@@ -22,6 +22,11 @@ chrome.runtime.onMessage.addListener((message) => {
     runManualPageScan();
     return;
   }
+  if (message?.action === "blockshieldResetState") {
+    extensionEnabled = Boolean(message.enabled);
+    clearAllBadges();
+    return;
+  }
   if (message?.action === "blockshieldOptionsChanged") {
     extensionEnabled = Boolean(message.enabled);
     if (!extensionEnabled) {
