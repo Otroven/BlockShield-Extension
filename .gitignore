@@ -12,3 +12,7 @@ frontend/dist
 frontend/.env
 frontend/.env.*
 !frontend/.env.example
+
+# ignore indexer runtime artifacts
+indexer/node_modules
+indexer/data/index.json
