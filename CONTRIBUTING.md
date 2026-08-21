@@ -58,7 +58,10 @@ Please keep changes aligned with the current product:
 - One concern per PR when possible.
 - Do not commit `frontend/public/phash.js`, `magick.js`, or `magick.wasm` (copied at Vite startup).
 - Do not commit indexer `data/index.json` or contract `out/` / `cache/`.
+- Do not commit `node_modules/` or `contract/original-content/lib/openzeppelin-contracts` (unused; not a dependency).
 - Update `CHANGELOG.md` under **Unreleased** for user-visible changes.
+
+When packing a source archive for review, zip the git tree (or `git archive`), not the working folder with install artifacts. That keeps `node_modules/` and any leftover OpenZeppelin checkout out of the bundle. Keep `LICENSE` and `THIRD_PARTY_NOTICES.md` in the archive.
 
 ## Versioning
 

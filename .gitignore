@@ -5,9 +5,14 @@ contract/*/build
 contract/*/b
 contract/*/broadcast
 
+# unused leftover vendor tree (OriginalContent does not import OpenZeppelin)
+contract/*/lib/openzeppelin-contracts
 
-# ignore frontend deps, secrets, and build output
-frontend/node_modules
+# ignore npm install trees (do not ship in source archives)
+node_modules
+**/node_modules
+
+# ignore frontend build output
 frontend/dist
 
 # ignore coverage reports
@@ -20,5 +25,4 @@ frontend/public/magick.js
 frontend/public/magick.wasm
 
 # ignore indexer runtime artifacts
-indexer/node_modules
 indexer/data/index.json

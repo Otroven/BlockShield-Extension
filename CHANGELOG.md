@@ -9,6 +9,10 @@ Version numbers follow [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- Leftover local OpenZeppelin tree is gitignored so it cannot re-enter git or a submission zip.
+
 ### Added
 
 - GitHub Actions: version consistency check on PRs, GitHub Release from CHANGELOG on `v*` tags.
