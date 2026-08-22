@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "ethers": "^6.17.0",
+    "phash-js": "0.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.1"

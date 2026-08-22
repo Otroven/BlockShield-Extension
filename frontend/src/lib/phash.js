@@ -1,4 +1,4 @@
-const PHASH_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/phash-js/dist/phash.js";
+const PHASH_SCRIPT_URL = "/phash.js";
 
 let scriptPromise = null;
 

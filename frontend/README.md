@@ -5,8 +5,10 @@ BlockShield blog-like React frontend with:
 - Public feed and post detail pages
 - Author post create/edit pages
 - Local persistence for quick testing
-- pHash generation (`phash-js`)
+- pHash generation (`phash-js@0.3.0`, same pinned package as the extension)
 - MetaMask + EIP-712 registration to `OriginalContent`
+
+Vite copies `phash-js` dist files (`phash.js`, `magick.js`, `magick.wasm`) into `public/` on startup so hashing does not depend on a CDN.
 
 ## Run
 

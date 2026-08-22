@@ -3,14 +3,11 @@
   "version": "1.0.0",
   "description": "This extension scans images on the current web page and adds a badge:",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "type": "commonjs",
   "dependencies": {
-    "phash-js": "^0.3.0"
+    "phash-js": "0.3.0"
   }
 }
