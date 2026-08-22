@@ -268,6 +268,187 @@ contract OriginalContentUnitTest is Test {
         assertFalse(originalContent.isScopeWhitelisted(pHash, "blog.naver.com/another-author/post-1"));
     }
 
+    function testGetContentRevertsWhenMissing() public {
+        vm.expectRevert(IOriginalContent.OriginalContent__ContentNotExists.selector);
+        originalContent.getContent(keccak256("missing-content"));
+    }
+
+    function testIsScopeWhitelistedRevertsWhenMissing() public {
+        vm.expectRevert(IOriginalContent.OriginalContent__ContentNotExists.selector);
+        originalContent.isScopeWhitelisted(keccak256("missing-scope"), "example.com");
+    }
+
+    function testRegisterContentAllowsEmptyScopeList() public {
+        bytes32 pHash = keccak256("empty-scopes");
+        string[] memory scopes = new string[](0);
+        _registerContent(pHash, s_creator, s_creatorKey, scopes);
+        IOriginalContent.ContentRecord memory record = originalContent.getContent(pHash);
+        assertEq(record.creator, s_creator);
+        assertTrue(record.isActive);
+        assertFalse(originalContent.isScopeWhitelisted(pHash, "example.com"));
+    }
+
+    function testRegisterContentAcceptsHostOnlyScope() public {
+        bytes32 pHash = keccak256("host-only");
+        string[] memory scopes = new string[](1);
+        scopes[0] = "example.com";
+        _registerContent(pHash, s_creator, s_creatorKey, scopes);
+        assertTrue(originalContent.isScopeWhitelisted(pHash, "example.com"));
+        assertTrue(originalContent.isScopeWhitelisted(pHash, "EXAMPLE.COM/"));
+        assertFalse(originalContent.isScopeWhitelisted(pHash, "example.com/blog"));
+    }
+
+    function testRegisterContentAcceptsMultipleScopesAndExtraChars() public {
+        bytes32 pHash = keccak256("multi-scope");
+        string[] memory scopes = new string[](2);
+        scopes[0] = "\texample.com/foo_bar~1%2f";
+        scopes[1] = "cdn.example.com";
+        _registerContent(pHash, s_creator, s_creatorKey, scopes);
+        assertTrue(originalContent.isScopeWhitelisted(pHash, "example.com/foo_bar~1%2f"));
+        assertTrue(originalContent.isScopeWhitelisted(pHash, "cdn.example.com"));
+    }
+
+    function testRegisterContentDeadlineEqualToNowIsValid() public {
+        bytes32 pHash = keccak256("deadline-eq");
+        uint256 deadline = block.timestamp;
+        bytes memory signature = _signRegisterPayload(
+            s_creatorKey,
+            pHash,
+            s_creator,
+            s_sampleAllowedScopes,
+            originalContent.nonces(s_creator),
+            deadline
+        );
+        originalContent.registerContent(pHash, s_creator, s_sampleAllowedScopes, deadline, signature);
+        assertEq(originalContent.getContent(pHash).creator, s_creator);
+    }
+
+    function testNormalizeScopeRejectsLeadingSlash() public {
+        _expectInvalidScopeOnRegister("/example.com");
+    }
+
+    function testNormalizeScopeRejectsLeadingHostDot() public {
+        _expectInvalidScopeOnRegister(".example.com");
+    }
+
+    function testNormalizeScopeRejectsTrailingHostDot() public {
+        _expectInvalidScopeOnRegister("example.com.");
+    }
+
+    function testNormalizeScopeRejectsEmptyDnsLabel() public {
+        _expectInvalidScopeOnRegister("example..com");
+    }
+
+    function testNormalizeScopeRejectsHyphenBeforeDot() public {
+        _expectInvalidScopeOnRegister("example-.com");
+    }
+
+    function testNormalizeScopeRejectsLeadingHyphenLabel() public {
+        _expectInvalidScopeOnRegister("-example.com");
+    }
+
+    function testNormalizeScopeRejectsOversizedDnsLabel() public {
+        bytes memory label = new bytes(64);
+        for (uint256 i = 0; i < label.length; i++) {
+            label[i] = "a";
+        }
+        _expectInvalidScopeOnRegister(string.concat(string(label), ".com"));
+    }
+
+    function testNormalizeScopeRejectsHostEndingHyphen() public {
+        _expectInvalidScopeOnRegister("example.com-");
+    }
+
+    function testNormalizeScopeRejectsDoubleSlashPath() public {
+        _expectInvalidScopeOnRegister("example.com/foo//bar");
+    }
+
+    function testRegisterContentRevertsOnShortSignature() public {
+        bytes32 pHash = keccak256("sig-short");
+        uint256 deadline = block.timestamp + 1 days;
+        vm.expectRevert(IOriginalContent.OriginalContent__InvalidSignature.selector);
+        originalContent.registerContent(pHash, s_creator, s_sampleAllowedScopes, deadline, hex"abcd");
+    }
+
+    function testRegisterContentAcceptsSignatureWithUnnormalizedV() public {
+        bytes32 pHash = keccak256("sig-v-raw");
+        uint256 deadline = block.timestamp + 1 days;
+        bytes memory signature = _signRegisterPayload(
+            s_creatorKey,
+            pHash,
+            s_creator,
+            s_sampleAllowedScopes,
+            originalContent.nonces(s_creator),
+            deadline
+        );
+        uint8 v = uint8(signature[64]);
+        require(v == 27 || v == 28, "expected normalized v");
+        signature[64] = bytes1(v - 27);
+
+        originalContent.registerContent(pHash, s_creator, s_sampleAllowedScopes, deadline, signature);
+        assertEq(originalContent.getContent(pHash).creator, s_creator);
+    }
+
+    function testRegisterContentRevertsOnInvalidV() public {
+        bytes32 pHash = keccak256("sig-v-bad");
+        uint256 deadline = block.timestamp + 1 days;
+        bytes memory signature = _signRegisterPayload(
+            s_creatorKey,
+            pHash,
+            s_creator,
+            s_sampleAllowedScopes,
+            originalContent.nonces(s_creator),
+            deadline
+        );
+        signature[64] = bytes1(uint8(29));
+        vm.expectRevert(IOriginalContent.OriginalContent__InvalidSignature.selector);
+        originalContent.registerContent(pHash, s_creator, s_sampleAllowedScopes, deadline, signature);
+    }
+
+    function testRegisterContentRevertsOnHighS() public {
+        bytes32 pHash = keccak256("sig-high-s");
+        uint256 deadline = block.timestamp + 1 days;
+        bytes memory signature = _signRegisterPayload(
+            s_creatorKey,
+            pHash,
+            s_creator,
+            s_sampleAllowedScopes,
+            originalContent.nonces(s_creator),
+            deadline
+        );
+
+        uint256 secp256k1n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+        bytes32 s;
+        assembly {
+            s := mload(add(signature, 0x40))
+        }
+        bytes32 highS = bytes32(secp256k1n - uint256(s));
+        assembly {
+            mstore(add(signature, 0x40), highS)
+        }
+
+        vm.expectRevert(IOriginalContent.OriginalContent__InvalidSignature.selector);
+        originalContent.registerContent(pHash, s_creator, s_sampleAllowedScopes, deadline, signature);
+    }
+
+    function testRegisterContentRevertsWhenEcrecoverReturnsZero() public {
+        bytes32 pHash = keccak256("sig-zero");
+        uint256 deadline = block.timestamp + 1 days;
+        bytes memory signature = new bytes(65);
+        signature[64] = bytes1(uint8(27));
+        vm.expectRevert(IOriginalContent.OriginalContent__InvalidSignature.selector);
+        originalContent.registerContent(pHash, s_creator, s_sampleAllowedScopes, deadline, signature);
+    }
+
+    function _expectInvalidScopeOnRegister(string memory scope) private {
+        bytes32 pHash = keccak256(abi.encodePacked("invalid-scope", scope));
+        uint256 deadline = block.timestamp + 1 days;
+        string[] memory scopes = new string[](1);
+        scopes[0] = scope;
+        vm.expectRevert(IOriginalContent.OriginalContent__InvalidScopeFormat.selector);
+        originalContent.registerContent(pHash, s_creator, scopes, deadline, "");
+    }
+
     function _registerContent(
         bytes32 pHash,
         address creator,

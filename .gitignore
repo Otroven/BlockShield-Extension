@@ -13,6 +13,10 @@ frontend/.env
 frontend/.env.*
 !frontend/.env.example
 
+# ignore coverage reports
+contract/*/coverage.lcov
+contract/*/lcov.info
+
 # ignore indexer runtime artifacts
 indexer/node_modules
 indexer/data/index.json
