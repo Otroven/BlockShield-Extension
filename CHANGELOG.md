@@ -13,6 +13,8 @@ Version numbers follow [SemVer](https://semver.org/).
 
 - GitHub Actions: version consistency check on PRs, GitHub Release from CHANGELOG on `v*` tags.
 - Root README section on what is different (first-claim, URL scopes, pre-registration gate, manual scan).
+- `samples/` demo images (`original.png`, `compressed.png`) for the judge scenario.
+- `npm run dev:stop` to kill the local Anvil, indexer, and Vite processes.
 
 ## [1.1.0] - 2026-08-22
 

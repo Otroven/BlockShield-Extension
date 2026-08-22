@@ -125,10 +125,12 @@ npm run frontend:dev
 
 ## Demo scenario (for judges)
 
-1. Register original image with wallet A.
-2. Try to register very similar image with wallet B.
+Sample images are in [`samples/`](./samples): `original.png` (wallet A) and `compressed.png` (wallet B). Stay on one origin (`http://localhost:5173` or `http://127.0.0.1:5173`, not mixed). After wallet A registers, wait for the indexer sync (or `POST http://127.0.0.1:8787/sync`) before wallet B.
+
+1. Register `samples/original.png` with wallet A.
+2. Try to register `samples/compressed.png` with wallet B.
 3. Confirm frontend blocks registration by similarity gate.
-4. Open pages with extension enabled and run manual page scan.
+4. Open the wallet A post with the extension and run a manual page scan.
 5. Confirm badge/tooltip output for exact and similar cases.
 
 ## Full reset workflow
@@ -181,6 +183,8 @@ Run commands from project root:
   - one-command indexer start with local defaults.
 - `npm run dev:restart`
   - full local reset + restart flow for chain/indexer/frontend.
+- `npm run dev:stop`
+  - stop Anvil, indexer, and the Vite frontend (ports `8545`, `8787`, `5173`).
 
 ## Limitations
 
