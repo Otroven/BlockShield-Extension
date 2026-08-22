@@ -5,13 +5,13 @@ It combines on-chain originality registration with browser-side detection and an
 
 ## Why this project exists
 
-Digital creators increasingly face unauthorized reposting and slight image modifications (compression, crop, color tweaks).
+Digital creators increasingly face unauthorized reposting and slight image modifications (compression, crop, flip).
 Traditional legal protection is expensive and slow.
 
 BlockShield aims to:
 
 - let creators prove originality on-chain with tamper-resistant records,
-- detect suspiciously similar images in real browsing contexts,
+- let users scan the current page and mark registered, unauthorized, or similar images,
 - prevent near-duplicate registrations before they are submitted.
 
 ## What is implemented
@@ -25,7 +25,7 @@ BlockShield aims to:
 ### 2) Browser Extension (`extension`)
 
 - Manual page scan mode to analyze images in the current tab.
-- Computes fingerprint bundles (original + transformed variants).
+- Computes the page image pHash plus flip and crop variants for comparison.
 - Verifies exact on-chain matches and page scope whitelist status.
 - Queries indexer API for nearest similarity when exact match is absent.
 - Shows badges such as original, suspicious, similar suspicious, and unregistered.
@@ -33,6 +33,7 @@ BlockShield aims to:
 ### 3) Frontend (`frontend`)
 
 - Blog-like demo app for content posting and on-chain registration.
+- Same pinned `phash-js@0.3.0` as the extension (bundled locally, not CDN).
 - MetaMask + EIP-712 flow for originality registration.
 - Pre-registration similarity gate:
   - checks indexer candidates before on-chain write,
@@ -54,6 +55,8 @@ BlockShield aims to:
 - `extension`: Chrome extension (MV3)
 - `indexer`: Node.js similarity indexer API
 - `scripts`: root helper scripts for local run/deploy
+
+See `CONTRIBUTING.md` for local setup and pull-request notes.
 
 ## Quick start (local demo)
 
@@ -172,7 +175,9 @@ Run commands from project root:
 
 ## Limitations
 
+- Page checks run only when the user starts a manual scan in the extension popup.
 - Similarity matching depends on off-chain indexer availability.
+- Cross-origin images can fail hashing when the browser blocks pixel access (CORS / canvas taint).
 - Current dispute handling for already-registered suspicious entries is policy/UI level, not on-chain arbitration.
 - Local demo defaults are tuned for development, not production hardening.
 
