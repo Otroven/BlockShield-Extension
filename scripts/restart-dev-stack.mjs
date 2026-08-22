@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import net from "node:net";
+import { stopDevPorts } from "./dev-ports.mjs";
 
-const PORTS_TO_CLEAN = [5173, 8787, 8545];
 const INDEX_DB_PATH = "indexer/data/index.json";
 
 function log(message) {
@@ -14,7 +14,7 @@ function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       shell: process.platform === "win32",
-      ...options
+      ...options,
     });
     let stdout = "";
     let stderr = "";
@@ -33,54 +33,6 @@ function run(command, args, options = {}) {
       }
     });
   });
-}
-
-async function getPidsByPortWin(port) {
-  try {
-    const { stdout } = await run("powershell", [
-      "-NoProfile",
-      "-Command",
-      `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess`
-    ]);
-    return [...new Set(stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))];
-  } catch {
-    return [];
-  }
-}
-
-async function getPidsByPortUnix(port) {
-  try {
-    const { stdout } = await run("lsof", ["-ti", `tcp:${port}`]);
-    return [...new Set(stdout.split(/\r?\n/).map((s) => s.trim()).filter(Boolean))];
-  } catch {
-    return [];
-  }
-}
-
-async function killPid(pid) {
-  if (process.platform === "win32") {
-    await run("taskkill", ["/PID", pid, "/F"]);
-    return;
-  }
-  await run("kill", ["-9", pid]);
-}
-
-async function cleanupPorts() {
-  for (const port of PORTS_TO_CLEAN) {
-    const pids =
-      process.platform === "win32"
-        ? await getPidsByPortWin(port)
-        : await getPidsByPortUnix(port);
-    if (!pids.length) continue;
-    for (const pid of pids) {
-      try {
-        await killPid(pid);
-        log(`[reset] killed pid=${pid} on port ${port}`);
-      } catch {
-        log(`[reset] failed to kill pid=${pid} on port ${port}`);
-      }
-    }
-  }
 }
 
 function isPortOpen(host, port, timeoutMs = 800) {
@@ -121,14 +73,14 @@ function startDetached(command, args, env = process.env) {
     detached: true,
     stdio: "ignore",
     shell: process.platform === "win32",
-    env
+    env,
   });
   child.unref();
 }
 
 async function main() {
   log("[reset] cleaning ports and old dev processes...");
-  await cleanupPorts();
+  await stopDevPorts((message) => log(message.replace("[stop]", "[reset]")));
 
   await removeIndexerDb();
 

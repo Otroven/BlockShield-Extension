@@ -8,6 +8,7 @@
     "indexer:dev": "npm --prefix indexer run dev",
     "indexer:start": "node ./scripts/start-indexer.mjs",
     "dev:restart": "node ./scripts/restart-dev-stack.mjs",
+    "dev:stop": "node ./scripts/stop-dev-stack.mjs",
     "version:check": "node ./scripts/check-version.mjs",
     "version:sync": "node ./scripts/sync-version.mjs"
   }

@@ -25,6 +25,12 @@ Full reset:
 npm run dev:restart
 ```
 
+Stop Anvil, indexer, and the frontend without starting them again:
+
+```bash
+npm run dev:stop
+```
+
 Frontend demo posts: `http://localhost:5173/feed?resetStorage=1`.
 
 ## Tests
