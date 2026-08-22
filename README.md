@@ -14,6 +14,15 @@ BlockShield aims to:
 - let users scan the current page and mark registered, unauthorized, or similar images,
 - prevent near-duplicate registrations before they are submitted.
 
+## What is different
+
+This is not an NFT mint, not reverse-image search, and not a legal copyright registry.
+
+- The chain stores a **first claim**: who registered this pHash, when, and which page scopes they allow.
+- The same image on a URL outside that list is **unauthorized placement**, not a new original.
+- Near-duplicate registrations from another wallet are **blocked before the transaction**, using an off-chain Hamming-distance index.
+- The extension does not crawl the web. It hashes the current tab on a **manual scan** (plus flip and crop variants) and reads those records.
+
 ## What is implemented
 
 ### 1) Smart Contract (`contract/original-content`)

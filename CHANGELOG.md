@@ -12,6 +12,7 @@ Version numbers follow [SemVer](https://semver.org/).
 ### Added
 
 - GitHub Actions: version consistency check on PRs, GitHub Release from CHANGELOG on `v*` tags.
+- Root README section on what is different (first-claim, URL scopes, pre-registration gate, manual scan).
 
 ## [1.1.0] - 2026-08-22
 
