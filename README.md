@@ -20,7 +20,7 @@ This is not an NFT mint, not reverse-image search, and not a legal copyright reg
 
 - The chain stores a **first claim**: who registered this pHash, when, and which page scopes they allow.
 - The same image on a URL outside that list is **unauthorized placement**, not a new original.
-- Near-duplicate registrations from another wallet are **blocked before the transaction**, using an off-chain Hamming-distance index.
+- Near-duplicate registrations from another wallet are **not signed**: the frontend queries the off-chain Hamming-distance index and skips EIP-712 signing. The contract still only rejects an **identical** pHash.
 - The extension does not crawl the web. It hashes the current tab on a **manual scan** (plus flip and crop variants) and reads those records.
 
 ## What is implemented
