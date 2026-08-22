@@ -18,10 +18,9 @@ BlockShield aims to:
 
 ### 1) Smart Contract (`contract/original-content`)
 
-- Registers canonical content with EIP-712 signatures.
-- Supports `registerContentBundle` to link multiple fingerprints to one canonical content.
-- Resolves linked fingerprints to canonical records for content and whitelist checks.
-- Emits events for content registration and fingerprint linking.
+- Registers a single pHash with EIP-712 signatures.
+- Stores creator, timestamp, and allowed URL scopes on-chain.
+- Emits events for content registration and whitelist updates.
 
 ### 2) Browser Extension (`extension`)
 

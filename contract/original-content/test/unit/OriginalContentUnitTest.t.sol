@@ -13,10 +13,6 @@ contract OriginalContentUnitTest is Test {
         keccak256(
             "RegisterContent(bytes32 pHash,address creator,bytes32 allowedScopesHash,uint256 nonce,uint256 deadline)"
         );
-    bytes32 private constant REGISTER_CONTENT_BUNDLE_TYPEHASH =
-        keccak256(
-            "RegisterContentBundle(bytes32 contentId,address creator,bytes32 fingerprintsHash,bytes32 allowedScopesHash,uint256 nonce,uint256 deadline)"
-        );
     bytes32 private constant NAME_HASH = keccak256(bytes("OriginalContent"));
     bytes32 private constant VERSION_HASH = keccak256(bytes("1"));
 
@@ -272,122 +268,6 @@ contract OriginalContentUnitTest is Test {
         assertFalse(originalContent.isScopeWhitelisted(pHash, "blog.naver.com/another-author/post-1"));
     }
 
-    function testRegisterContentBundleLinksFingerprintToCanonical() public {
-        bytes32 contentId = keccak256("content-main");
-        bytes32[] memory fingerprints = new bytes32[](1);
-        fingerprints[0] = keccak256("content-main-flipped");
-        uint256 deadline = block.timestamp + 1 days;
-        bytes memory signature = _signRegisterBundlePayload(
-            s_creatorKey,
-            contentId,
-            s_creator,
-            fingerprints,
-            s_sampleAllowedScopes,
-            originalContent.nonces(s_creator),
-            deadline
-        );
-
-        originalContent.registerContentBundle(
-            contentId,
-            s_creator,
-            fingerprints,
-            s_sampleAllowedScopes,
-            deadline,
-            signature
-        );
-
-        IOriginalContent.ContentRecord memory linkedRecord = originalContent.getContent(fingerprints[0]);
-        assertEq(linkedRecord.creator, s_creator);
-        assertEq(linkedRecord.pHash, contentId);
-        assertTrue(originalContent.isScopeWhitelisted(fingerprints[0], s_sampleAllowedScopes[0]));
-    }
-
-    function testUpdateWhitelistUsingLinkedFingerprint() public {
-        bytes32 contentId = keccak256("content-whitelist-main");
-        bytes32[] memory fingerprints = new bytes32[](1);
-        fingerprints[0] = keccak256("content-whitelist-alt");
-        uint256 deadline = block.timestamp + 1 days;
-        bytes memory signature = _signRegisterBundlePayload(
-            s_creatorKey,
-            contentId,
-            s_creator,
-            fingerprints,
-            s_sampleAllowedScopes,
-            originalContent.nonces(s_creator),
-            deadline
-        );
-
-        originalContent.registerContentBundle(
-            contentId,
-            s_creator,
-            fingerprints,
-            s_sampleAllowedScopes,
-            deadline,
-            signature
-        );
-
-        vm.prank(s_creator);
-        originalContent.updateWhitelist(fingerprints[0], "blog.naver.com/otroven/new-path", true);
-        assertTrue(originalContent.isScopeWhitelisted(contentId, "blog.naver.com/otroven/new-path"));
-    }
-
-    function testRegisterContentBundleRevertsOnDuplicateFingerprint() public {
-        bytes32 existingPHash = keccak256("content-existing");
-        _registerContent(existingPHash, s_creator, s_creatorKey, s_sampleAllowedScopes);
-
-        bytes32 contentId = keccak256("content-new");
-        bytes32[] memory fingerprints = new bytes32[](1);
-        fingerprints[0] = existingPHash;
-        uint256 deadline = block.timestamp + 1 days;
-        bytes memory signature = _signRegisterBundlePayload(
-            s_creatorKey,
-            contentId,
-            s_creator,
-            fingerprints,
-            s_sampleAllowedScopes,
-            originalContent.nonces(s_creator),
-            deadline
-        );
-
-        vm.expectRevert(IOriginalContent.OriginalContent__ContentAlreadyRegistered.selector);
-        originalContent.registerContentBundle(
-            contentId,
-            s_creator,
-            fingerprints,
-            s_sampleAllowedScopes,
-            deadline,
-            signature
-        );
-    }
-
-    function testRegisterContentBundleRevertsWhenInputFingerprintsContainDuplicates() public {
-        bytes32 contentId = keccak256("content-dup-in-request");
-        bytes32 duplicateFingerprint = keccak256("content-dup-in-request-fp");
-        bytes32[] memory fingerprints = new bytes32[](2);
-        fingerprints[0] = duplicateFingerprint;
-        fingerprints[1] = duplicateFingerprint;
-        uint256 deadline = block.timestamp + 1 days;
-        bytes memory signature = _signRegisterBundlePayload(
-            s_creatorKey,
-            contentId,
-            s_creator,
-            fingerprints,
-            s_sampleAllowedScopes,
-            originalContent.nonces(s_creator),
-            deadline
-        );
-
-        vm.expectRevert(IOriginalContent.OriginalContent__ContentAlreadyRegistered.selector);
-        originalContent.registerContentBundle(
-            contentId,
-            s_creator,
-            fingerprints,
-            s_sampleAllowedScopes,
-            deadline,
-            signature
-        );
-    }
-
     function _registerContent(
         bytes32 pHash,
         address creator,
@@ -413,20 +293,6 @@ contract OriginalContentUnitTest is Test {
         signature = abi.encodePacked(r, s, v);
     }
 
-    function _signRegisterBundlePayload(
-        uint256 signerKey,
-        bytes32 contentId,
-        address payloadCreator,
-        bytes32[] memory fingerprints,
-        string[] memory allowedScopes,
-        uint256 nonce,
-        uint256 deadline
-    ) private view returns (bytes memory signature) {
-        bytes32 digest = _buildBundleDigest(contentId, payloadCreator, fingerprints, allowedScopes, nonce, deadline);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
-        signature = abi.encodePacked(r, s, v);
-    }
-
     function _buildDigest(
         bytes32 pHash,
         address payloadCreator,
@@ -439,32 +305,6 @@ contract OriginalContentUnitTest is Test {
                 REGISTER_CONTENT_TYPEHASH,
                 pHash,
                 payloadCreator,
-                _hashAllowedScopes(allowedScopes),
-                nonce,
-                deadline
-            )
-        );
-
-        bytes32 domainSeparator = keccak256(
-            abi.encode(EIP712_DOMAIN_TYPEHASH, NAME_HASH, VERSION_HASH, block.chainid, address(originalContent))
-        );
-        return keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-    }
-
-    function _buildBundleDigest(
-        bytes32 contentId,
-        address payloadCreator,
-        bytes32[] memory fingerprints,
-        string[] memory allowedScopes,
-        uint256 nonce,
-        uint256 deadline
-    ) private view returns (bytes32) {
-        bytes32 structHash = keccak256(
-            abi.encode(
-                REGISTER_CONTENT_BUNDLE_TYPEHASH,
-                contentId,
-                payloadCreator,
-                keccak256(abi.encodePacked(fingerprints)),
                 _hashAllowedScopes(allowedScopes),
                 nonce,
                 deadline
