@@ -88,7 +88,7 @@ function normalizeIndexerUrl(url) {
 
 function normalizeThreshold(value) {
   const num = Number(value);
-  if (!Number.isFinite(num)) return 10;
+  if (!Number.isFinite(num)) return 16;
   if (num < 0) return 0;
   if (num > 64) return 64;
   return Math.trunc(num);

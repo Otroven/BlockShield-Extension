@@ -61,7 +61,7 @@ npm --prefix extension install
 | RPC URL | `http://127.0.0.1:8545` | `eth_call` endpoint |
 | 인덱서 API URL | `http://127.0.0.1:8787` | Similarity API; leave empty to skip remote match |
 | 스코프 불일치 표시 | 도용 의심 (`strict`) | `neutral` shows a softer “미승인 스코프” badge |
-| 유사도 임계값 | `10` (0–64) | Max Hamming distance for “유사 도용 의심” |
+| 유사도 임계값 | `16` (0–64) | Max Hamming distance for “유사 도용 의심” (`samples/compressed.png` is distance 15 from `original.png`) |
 | 저장 | — | Writes `chrome.storage.sync` and notifies open tabs |
 | 페이지 검사 | — | Manual rescan of the active tab |
 | 초기화 | — | Restore defaults and clear local similarity cache |

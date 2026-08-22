@@ -1,7 +1,7 @@
 const DEFAULT_OPTIONS = {
   enabled: true,
   scopePolicy: "strict",
-  similarityThreshold: 10,
+  similarityThreshold: 16,
   contractAddress: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
   rpcUrl: "http://127.0.0.1:8545",
   indexerUrl: "http://127.0.0.1:8787"
@@ -49,7 +49,7 @@ async function init() {
   document.getElementById("enabled").checked = Boolean(options.enabled);
   document.getElementById("scopePolicy").value =
     options.scopePolicy === "neutral" ? "neutral" : "strict";
-  document.getElementById("similarityThreshold").value = Number(options.similarityThreshold ?? 10);
+  document.getElementById("similarityThreshold").value = Number(options.similarityThreshold ?? 16);
   document.getElementById("contractAddress").value = options.contractAddress;
   document.getElementById("rpcUrl").value = options.rpcUrl;
   document.getElementById("indexerUrl").value = options.indexerUrl ?? "";

@@ -9,9 +9,6 @@ contract/*/broadcast
 # ignore frontend deps, secrets, and build output
 frontend/node_modules
 frontend/dist
-frontend/.env
-frontend/.env.*
-!frontend/.env.example
 
 # ignore coverage reports
 contract/*/coverage.lcov

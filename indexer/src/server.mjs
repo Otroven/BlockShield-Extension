@@ -294,7 +294,7 @@ async function main() {
         const fingerprints = Array.isArray(body.fingerprints) ? body.fingerprints : [];
         const threshold = Number.isFinite(Number(body.threshold))
           ? Math.max(0, Math.min(64, Number(body.threshold)))
-          : 10;
+          : 16;
 
         const limit = Number.isFinite(Number(body.limit))
           ? Math.max(1, Math.min(100, Number(body.limit)))

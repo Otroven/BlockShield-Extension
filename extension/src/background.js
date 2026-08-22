@@ -1,7 +1,7 @@
 const DEFAULT_OPTIONS = {
   enabled: true,
   scopePolicy: "strict",
-  similarityThreshold: 10,
+  similarityThreshold: 16,
   contractAddress: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
   rpcUrl: "http://127.0.0.1:8545",
   indexerUrl: "http://127.0.0.1:8787"
@@ -247,7 +247,7 @@ function normalizeIndexerUrl(url) {
 
 function clampThreshold(value) {
   const num = Number(value);
-  if (!Number.isFinite(num)) return 10;
+  if (!Number.isFinite(num)) return 16;
   if (num < 0) return 0;
   if (num > 64) return 64;
   return Math.trunc(num);

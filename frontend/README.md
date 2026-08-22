@@ -20,11 +20,7 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-If you use local anvil, copy env first:
-
-```bash
-cp .env.example .env
-```
+Local Anvil defaults live in committed `.env` (`VITE_SIMILARITY_THRESHOLD=16` so `samples/compressed.png` is blocked). Override there if needed.
 
 Used env values:
 
