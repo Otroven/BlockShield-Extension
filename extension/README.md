@@ -1,40 +1,88 @@
-# BlockShield Browser Extension (MVP)
+# BlockShield Browser Extension
 
-This extension scans images on the current web page and adds a badge:
+Chrome Manifest V3 extension that inspects `<img>` elements on the current tab and shows a badge for originality status.
 
-- `original`: image hash exists on-chain and current page scope is whitelisted
-- `suspected unauthorized use`: image hash exists on-chain but current page scope is not whitelisted
-- `not registered`: no on-chain record for this image hash
+It does **not** crawl the web and it does not scan automatically. The user opens the popup and clicks **페이지 검사**. The intended demo target is the local BlockShield frontend (`http://localhost:5173`), not third-party sites.
 
-## What it does
+## What it checks
 
-1. Detects `<img>` elements on the page.
-2. Computes a perceptual hash (pHash) for each image.
-3. Calls the `OriginalContent` contract:
-   - `getContent(bytes32)` to check existence
-   - `isScopeWhitelisted(bytes32,string)` for page scope and host scope
-4. Renders an overlay badge per image.
+For each image that is at least 32×32:
+
+1. Compute a pHash of the displayed image with local `phash-js@0.3.0` (ImageMagick WASM bundled in the extension).
+2. Also hash two variants generated in-page: horizontal flip, and a centered 85% crop.
+3. Ask the background worker to verify those hashes:
+   - exact match on `OriginalContent.getContent(bytes32)`
+   - page host/path whitelist via `isScopeWhitelisted(bytes32,string)`
+   - if no exact match, nearest neighbor from the indexer (`POST /match`) using Hamming distance
+4. Draw a badge on the image. Hover shows creator address and, for similar hits, distance.
+
+## Badge statuses
+
+| Badge | Meaning |
+| --- | --- |
+| 검증 중 | Hash/RPC/indexer request in flight |
+| 원본 확인 | On-chain record exists and the current page host or host/path is whitelisted |
+| 등록 원본(미승인 스코프) | Record exists, but this page is not in the creator allow-list (`scopePolicy=neutral`) |
+| 도용 의심 | Same as above when `scopePolicy=strict` (default) |
+| 유사 도용 의심 | No exact hash, but indexer (or local cache) found a neighbor within the Hamming threshold |
+| 미등록 | No on-chain or similar record |
+| 검증 실패 | Fetch/canvas/pHash/RPC error (including CORS on foreign origins) |
+| 건너뜀 | Missing `src` or image smaller than 32×32 |
+
+Exact-match fingerprints are stored in `chrome.storage.local` as a small similarity cache (max 2000 entries) so a later scan can still compare if the indexer is down.
+
+## Files
+
+- `manifest.json`: MV3 permissions, content scripts, WASM worker assets
+- `popup.html` / `src/popup.js` / `src/popup.css`: settings UI
+- `src/content.js`: page scan, variant hashes, badges
+- `src/background.js`: `eth_call` to the contract, indexer client, Hamming distance
+- `src/phash-worker-shim.js`: rewrite ImageMagick worker URLs to `chrome.runtime.getURL(...)`
 
 ## Install (unpacked)
 
-1. Run `npm install` inside the `extension` directory.
-2. Open `chrome://extensions` (or Edge extensions page).
-3. Enable **Developer mode**.
-4. Click **Load unpacked**.
-5. Select the `extension` directory.
+From the repository root:
 
-## Configure
+```bash
+npm --prefix extension install
+```
 
-Open the extension popup:
+1. Open `chrome://extensions`.
+2. Enable **Developer mode**.
+3. **Load unpacked** and select the `extension` directory (the folder that contains `manifest.json`).
+4. Keep the local chain, indexer, and frontend running. See the root README.
 
-- `Contract address`: deployed `OriginalContent` contract
-- `RPC URL`: JSON-RPC endpoint
-- `Indexer API URL`: similarity indexer endpoint (e.g. `http://127.0.0.1:8787`)
-- `Enable scanning`: on/off
-- `Page scan`: manually run scanning for the current page
-- `초기화`: reset extension settings (`chrome.storage.sync`) and local similarity cache (`chrome.storage.local`)
+## Popup settings
 
-## Notes
+| Field | Default | Role |
+| --- | --- | --- |
+| 검증 활성화 | on | If off, badges are cleared and scans no-op |
+| 컨트랙트 주소 | Anvil default `0x5FbDB2315678afecb367f032d93F642f64180aa3` | `OriginalContent` |
+| RPC URL | `http://127.0.0.1:8545` | `eth_call` endpoint |
+| 인덱서 API URL | `http://127.0.0.1:8787` | Similarity API; leave empty to skip remote match |
+| 스코프 불일치 표시 | 도용 의심 (`strict`) | `neutral` shows a softer “미승인 스코프” badge |
+| 유사도 임계값 | `10` (0–64) | Max Hamming distance for “유사 도용 의심” |
+| 저장 | — | Writes `chrome.storage.sync` and notifies open tabs |
+| 페이지 검사 | — | Manual rescan of the active tab |
+| 초기화 | — | Restore defaults and clear local similarity cache |
 
-- This is an MVP for hackathon/demo workflow.
-- Hashing uses local `phash-js` runtime loaded from extension dependencies.
+Settings live in `chrome.storage.sync`. The similarity cache lives in `chrome.storage.local` and is separate from the frontend `localStorage`.
+
+## Local demo flow
+
+1. Register an image on the frontend with wallet A (on-chain).
+2. Open that post in the same origin and run **페이지 검사** → 원본 확인.
+3. Open the same image on a path that is not whitelisted → 도용 의심 (or 미승인 스코프).
+4. Register/block a near-duplicate with wallet B on the frontend (similarity gate).
+5. Scan a flipped or cropped copy on a demo page → 유사 도용 의심 when distance ≤ threshold.
+
+## Limits
+
+- Manual scan only. New images after a scan are not watched until the next click.
+- Same-origin images (the local Vite app) hash reliably. Cross-origin pixels may fail browser CORS / canvas taint checks.
+- Similarity search needs the indexer process, unless a previous exact match already filled the local cache.
+- pHash must stay on `phash-js@0.3.0`, matching the frontend pin, or registered hashes will not match scanned hashes.
+
+## License
+
+MIT. See the repository `LICENSE`.
