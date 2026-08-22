@@ -1,66 +1,72 @@
-## Foundry
+# OriginalContent
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+Foundry workspace for the BlockShield originality registry.
 
-Foundry consists of:
+The contract stores a perceptual hash (`pHash`) with the creator address, a timestamp, and URL scopes the creator allows. Registration uses an EIP-712 signature from that creator. The browser extension and indexer read these records; they do not write them.
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+## What is on-chain
 
-## Documentation
+- `pHash`: 32-byte fingerprint of the registered image
+- `creator`: signer who registered it
+- `createdAt`: block timestamp
+- `isActive`: stored as `true` on register (no deactivate path yet)
+- whitelist scopes: host or `host/path` strings the creator authorizes
 
-https://book.getfoundry.sh/
+There is no on-chain similarity search. Near-duplicate checks run off-chain in the indexer.
 
-## Usage
+## Main functions
 
-### Build
+| Function | Role |
+| --- | --- |
+| `registerContent` | EIP-712 signed registration of one `pHash` and initial scopes |
+| `updateWhitelist` | creator adds or removes a scope |
+| `getContent` | returns the record or reverts if missing |
+| `isScopeWhitelisted` | checks whether a page scope is allowed |
+| `nonces` | per-creator EIP-712 nonce |
 
-```shell
-$ forge build
+Scopes are normalized on-chain (lowercase, trimmed host/path). Invalid formats revert.
+
+## Layout
+
+- `src/IOriginalContent.sol`: events, errors, `ContentRecord`, interface
+- `src/OriginalContent.sol`: implementation
+- `script/DeployOriginalContent.s.sol`: local/script deploy
+- `test/unit/OriginalContentUnitTest.t.sol`: unit tests
+
+## Prerequisites
+
+[Foundry](https://book.getfoundry.sh/getting-started/installation) (`forge`, `anvil`).
+
+From this directory:
+
+```bash
+forge build
+forge test
+forge fmt
 ```
 
-### Test
+## Local deploy
 
-```shell
-$ forge test
+From the **repository root** (starts Anvil if needed):
+
+```bash
+npm run chain:deploy
 ```
 
-### Format
+Default local address after a fresh Anvil deploy:
 
-```shell
-$ forge fmt
+- `0x5FbDB2315678afecb367f032d93F642f64180aa3`
+
+From this directory, against an already running node:
+
+```bash
+forge script script/DeployOriginalContent.s.sol:DeployOriginalContent \
+  --rpc-url http://127.0.0.1:8545 \
+  --broadcast \
+  --private-key <anvil-key>
 ```
 
-### Gas Snapshots
+## License
 
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+MIT. See the repository `LICENSE`.
+This workspace vendors `forge-std` under `lib/forge-std` (Apache-2.0 / MIT).
