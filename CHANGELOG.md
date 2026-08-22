@@ -19,6 +19,7 @@ Version numbers follow [SemVer](https://semver.org/).
 
 ### Added
 
+- `license: MIT` on the root, frontend, and indexer `package.json` files (extension already had it).
 - GitHub Actions: version consistency check on PRs, GitHub Release from CHANGELOG on `v*` tags.
 - Root README section on what is different (first-claim, URL scopes, pre-registration gate, manual scan).
 - `samples/` demo images (`original.png`, `compressed.png`) for the judge scenario.
