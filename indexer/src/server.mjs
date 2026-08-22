@@ -14,9 +14,8 @@ const DATA_DIR = resolve(process.cwd(), "data");
 const DB_PATH = resolve(DATA_DIR, "index.json");
 
 const ABI = [
-  "event ContentRegistered(bytes32 indexed pHash, address indexed creator, uint256 registeredAt)",
-  "event FingerprintLinked(bytes32 indexed contentId, bytes32 indexed fingerprint)",
-  "function getContent(bytes32 pHash) view returns (tuple(bytes32 pHash, address creator, uint64 createdAt, bool exists, string[] whitelistScope))"
+  "event ContentRegistered(bytes32 indexed pHash, address indexed creator, uint256 createdAt)",
+  "function getContent(bytes32 pHash) view returns (tuple(address creator, bytes32 pHash, uint256 createdAt, bool isActive))"
 ];
 
 const iface = new ethers.Interface(ABI);
@@ -67,28 +66,11 @@ async function writeDb(db) {
   await writeFile(DB_PATH, `${JSON.stringify(db, null, 2)}\n`, "utf8");
 }
 
-async function safeGetContent(contract, contentId) {
-  try {
-    const record = await contract.getContent(contentId);
-    if (!record?.exists) {
-      return null;
-    }
-    return {
-      contentId: toLowerHex(contentId),
-      creator: String(record.creator).toLowerCase(),
-      createdAt: Number(record.createdAt)
-    };
-  } catch {
-    return null;
-  }
-}
-
 async function syncOnce(provider, contractAddress) {
   if (!ethers.isAddress(contractAddress)) {
     throw new Error("Invalid CONTRACT_ADDRESS. Expected 20-byte 0x-prefixed address.");
   }
 
-  const contract = new ethers.Contract(contractAddress, ABI, provider);
   const network = await provider.getNetwork();
   const latestBlock = await provider.getBlockNumber();
   const db = await readDb();
@@ -146,26 +128,10 @@ async function syncOnce(provider, contractAddress) {
       if (parsed.name === "ContentRegistered") {
         const contentId = toLowerHex(parsed.args.pHash);
         const creator = String(parsed.args.creator).toLowerCase();
-        const createdAt = Number(parsed.args.registeredAt);
+        const createdAt = Number(parsed.args.createdAt);
 
         db.contents[contentId] = { contentId, creator, createdAt };
         db.fingerprints[contentId] = contentId;
-        applied += 1;
-        continue;
-      }
-
-      if (parsed.name === "FingerprintLinked") {
-        const contentId = toLowerHex(parsed.args.contentId);
-        const fingerprint = toLowerHex(parsed.args.fingerprint);
-
-        db.fingerprints[fingerprint] = contentId;
-
-        if (!db.contents[contentId]) {
-          const fetched = await safeGetContent(contract, contentId);
-          if (fetched) {
-            db.contents[contentId] = fetched;
-          }
-        }
         applied += 1;
       }
     }
