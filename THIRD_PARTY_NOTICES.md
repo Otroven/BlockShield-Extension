@@ -8,7 +8,6 @@ Those components remain under their respective licenses.
 - `ethers` (JavaScript library)
 - `phash-js` (perceptual hashing)
 - `forge-std` (Foundry testing/deployment utilities)
-- `openzeppelin-contracts` (smart contract components)
 
 ## Contract submodule/vendor notices
 
