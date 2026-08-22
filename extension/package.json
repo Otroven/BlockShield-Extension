@@ -1,6 +1,6 @@
 {
   "name": "extension",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "This extension scans images on the current web page and adds a badge:",
   "main": "index.js",
   "keywords": [],

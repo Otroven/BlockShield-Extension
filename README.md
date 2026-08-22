@@ -185,3 +185,5 @@ Run commands from project root:
 
 This repository is licensed under the MIT License. See `LICENSE`.
 Third-party components keep their own licenses; see `THIRD_PARTY_NOTICES.md`.
+The current project version is in `VERSION`; release notes are in `CHANGELOG.md`.
+GitHub Actions checks those stay in sync, and a `v*` tag creates a GitHub Release from the matching changelog section. See `CONTRIBUTING.md`.

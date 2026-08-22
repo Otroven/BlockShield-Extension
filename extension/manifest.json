@@ -2,9 +2,15 @@
   "manifest_version": 3,
   "name": "BlockShield Verifier",
   "description": "Detects whether web images are registered on-chain and marks originality status.",
-  "version": "0.1.0",
-  "permissions": ["storage", "activeTab", "tabs"],
-  "host_permissions": ["<all_urls>"],
+  "version": "1.1.0",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "src/background.js"
   },
@@ -14,8 +20,15 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["src/phash-worker-shim.js", "node_modules/phash-js/dist/phash.js", "src/content.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "src/phash-worker-shim.js",
+        "node_modules/phash-js/dist/phash.js",
+        "src/content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -25,7 +38,9 @@
         "node_modules/phash-js/dist/magick.js",
         "node_modules/phash-js/dist/magick.wasm"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

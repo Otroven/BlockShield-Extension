@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  github-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check VERSION, CHANGELOG, and package versions
+        run: node ./scripts/check-version.mjs
+      - name: Require tag to match VERSION
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "$tag" != "$version" ]; then
+            echo "Tag v$tag does not match VERSION $version"
+            exit 1
+          fi
+      - name: Create GitHub Release from CHANGELOG
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node ./scripts/changelog-notes.mjs > /tmp/release-notes.md
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file /tmp/release-notes.md
