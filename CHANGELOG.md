@@ -15,6 +15,8 @@ Version numbers follow [SemVer](https://semver.org/).
 - Root README section on what is different (first-claim, URL scopes, pre-registration gate, manual scan).
 - `samples/` demo images (`original.png`, `compressed.png`) for the judge scenario.
 - `npm run dev:stop` to kill the local Anvil, indexer, and Vite processes.
+- `npm run dev:start` to bring up Anvil, indexer, and Vite in one terminal.
+- Demo Hamming threshold `16` (frontend `.env` + extension default) so `samples/compressed.png` is caught.
 
 ## [1.1.0] - 2026-08-22
 

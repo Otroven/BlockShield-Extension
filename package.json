@@ -7,6 +7,7 @@
     "frontend:dev": "npm --prefix frontend run dev",
     "indexer:dev": "npm --prefix indexer run dev",
     "indexer:start": "node ./scripts/start-indexer.mjs",
+    "dev:start": "node ./scripts/start-dev-stack.mjs",
     "dev:restart": "node ./scripts/restart-dev-stack.mjs",
     "dev:stop": "node ./scripts/stop-dev-stack.mjs",
     "version:check": "node ./scripts/check-version.mjs",

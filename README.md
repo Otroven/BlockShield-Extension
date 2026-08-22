@@ -85,35 +85,19 @@ npm --prefix extension install
 npm --prefix indexer install
 ```
 
-### 2) Deploy contract to local chain
+### 2) Start the local stack
+
+One terminal starts Anvil (if needed), deploys the contract, starts the indexer, and runs the frontend:
 
 ```bash
-npm run chain:deploy
+npm run dev:start
 ```
 
-Default local contract address:
+Default local contract address: `0x5FbDB2315678afecb367f032d93F642f64180aa3`.
 
-- `0x5FbDB2315678afecb367f032d93F642f64180aa3`
+To run pieces separately: `npm run chain:deploy`, `npm run indexer:start`, `npm run frontend:dev`.
 
-### 3) Start indexer
-
-```bash
-npm run indexer:start
-```
-
-Optional overrides:
-
-```bash
-npm run indexer:start -- --contract-address 0xYourAddress --rpc-url http://127.0.0.1:8545 --port 8787
-```
-
-### 4) Run frontend
-
-```bash
-npm run frontend:dev
-```
-
-### 5) Load extension
+### 3) Load extension
 
 1. Open `chrome://extensions`.
 2. Enable Developer mode.
@@ -125,7 +109,7 @@ npm run frontend:dev
 
 ## Demo scenario (for judges)
 
-Sample images are in [`samples/`](./samples): `original.png` (wallet A) and `compressed.png` (wallet B). Stay on one origin (`http://localhost:5173` or `http://127.0.0.1:5173`, not mixed). After wallet A registers, wait for the indexer sync (or `POST http://127.0.0.1:8787/sync`) before wallet B.
+Sample images are in [`samples/`](./samples): `original.png` (wallet A) and `compressed.png` (wallet B, Hamming distance 15). Frontend `.env` and the extension default similarity threshold are `16`. Stay on one origin (`http://localhost:5173` or `http://127.0.0.1:5173`, not mixed). After wallet A registers, wait for the indexer sync (or `POST http://127.0.0.1:8787/sync`) before wallet B. If the extension was installed earlier, set the popup threshold to 16 or use 초기화.
 
 1. Register `samples/original.png` with wallet A.
 2. Try to register `samples/compressed.png` with wallet B.
@@ -172,6 +156,8 @@ If you need full extension reset, use:
 
 Run commands from project root:
 
+- `npm run dev:start`
+  - one-command local stack: Anvil + contract deploy + indexer + Vite frontend.
 - `npm run chain:deploy`
   - starts `anvil` if needed,
   - deploys `OriginalContent` via Foundry script.

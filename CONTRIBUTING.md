@@ -12,9 +12,7 @@ From the repository root:
 npm --prefix frontend install
 npm --prefix extension install
 npm --prefix indexer install
-npm run chain:deploy
-npm run indexer:start
-npm run frontend:dev
+npm run dev:start
 ```
 
 Load the unpacked Chrome extension from `extension/` and point the popup at the local contract, `http://127.0.0.1:8545`, and `http://127.0.0.1:8787`.
